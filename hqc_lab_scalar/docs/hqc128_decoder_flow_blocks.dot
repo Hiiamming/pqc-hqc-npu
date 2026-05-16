@@ -1,0 +1,82 @@
+digraph HQC128DecoderFlowBlocks {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    pad=0.25,
+    nodesep=0.42,
+    ranksep=0.55,
+    splines=polyline,
+    fontname="DejaVu Sans",
+    label="HQC-128 decoder flow - block view",
+    labelloc=t,
+    fontsize=24
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="DejaVu Sans",
+    fontsize=16,
+    margin="0.22,0.12",
+    color="#334155",
+    fillcolor="#f8fafc"
+  ];
+
+  edge [
+    color="#334155",
+    arrowsize=0.8,
+    penwidth=1.5,
+    fontname="DejaVu Sans",
+    fontsize=11
+  ];
+
+  input [
+    label="Input: w / em\nIn: F2^17664, 2208 B, uint64_t[276]\nOut: 46 x 384-bit RM blocks",
+    fillcolor="#dbeafe"
+  ];
+
+  layout [
+    label="RM input layout\nIn: 17664-bit binary codeword\nOut: W_i in F2^384 = 3 x F2^128",
+    fillcolor="#f1f5f9"
+  ];
+
+  subgraph cluster_rm {
+    label="Reed-Muller decoder";
+    color="#2563eb";
+    penwidth=2;
+    style="rounded";
+    fontsize=18;
+    fontname="DejaVu Sans";
+
+    rm_loop [label="Loop over 46 RS symbols\nIn: W_0..W_45, each 384 bit = 48 B\nOut: one W_i = 3 x rm_codeword_t", fillcolor="#bfdbfe", color="#2563eb"];
+    expand [label="expand_and_sum()\nIn: 3 x F2^128 = 384 bit = 48 B\nOut: S in {0,1,2,3}^128, int16_t[128] = 256 B", fillcolor="#e0f2fe", color="#2563eb"];
+    hadamard [label="hadamard()\nIn: S in Z^128, int16_t[128] = 256 B\nOut: T in Z^128, int16_t[128] = 256 B", fillcolor="#e0f2fe", color="#2563eb"];
+    bias [label="bias correction\nIn: T in Z^128, int16_t[128]\nOut: T' in Z^128, T'[0] = T[0] - 192", fillcolor="#e0f2fe", color="#2563eb"];
+    peak [label="find_peaks()\nIn: T' in Z^128, int16_t[128]\nOut: a_i in GF(2^8), 1 byte", fillcolor="#e0f2fe", color="#2563eb"];
+    rm_out [label="RM output / RS input\nIn: a_0..a_45, 46 B\nOut: r(x) in GF(2^8)[x], deg r < 46", fillcolor="#bfdbfe", color="#2563eb"];
+  }
+
+  subgraph cluster_rs {
+    label="Reed-Solomon decoder";
+    color="#16a34a";
+    penwidth=2;
+    style="rounded";
+    fontsize=18;
+    fontname="DejaVu Sans";
+
+    rs_params [label="RS-S1 parameters\nIn: r(x), 46 symbols over GF(2^8)\nOut: RS[46,16,31], delta=15, GF poly 0x11D", fillcolor="#bbf7d0", color="#16a34a"];
+    synd [label="1. Syndromes\nIn: r(x) in GF(2^8)[x], deg r < 46\nOut: S_1..S_30 in GF(2^8), uint16_t[30]", fillcolor="#dcfce7", color="#16a34a"];
+    elp [label="2. Locator sigma(x)\nIn: 30 syndromes over GF(2^8)\nOut: sigma(x) in GF(2^8)[x], deg <= 15", fillcolor="#dcfce7", color="#16a34a"];
+    roots [label="3. Error locations\nIn: sigma(x), deg <= 15\nOut: error mask e[0..45], 46 bits stored in uint8_t[256]", fillcolor="#dcfce7", color="#16a34a"];
+    values [label="4-5. Error values\nIn: sigma(x), syndromes, error mask\nOut: error values E_i in GF(2^8), uint16_t[46]", fillcolor="#dcfce7", color="#16a34a"];
+    correct [label="6. Correct + extract\nIn: r_i and E_i, 46 GF(2^8) symbols\nOut: m in GF(2^8)^16 = 16 B", fillcolor="#dcfce7", color="#16a34a"];
+  }
+
+  output [
+    label="Decoder output\nIn: corrected RS codeword c(x), 46 B\nOut: m in F2^128 = 16 B, uint64_t[2]",
+    fillcolor="#fee2e2"
+  ];
+
+  input -> layout -> rm_loop -> expand -> hadamard -> bias -> peak -> rm_out;
+  rm_out -> rs_params -> synd -> elp -> roots -> values -> correct -> output;
+}
