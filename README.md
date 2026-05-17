@@ -1,10 +1,52 @@
-# HQC-128 Hexagon Lab Notes
+# HQC-{128,192,256} Hexagon Lab Notes
 
 ## Current layout
 
 - `hqc_lab_scalar/`: portable scalar C baseline. Its Hexagon decode benchmark intentionally builds without `-mhvx`.
 - `hqc_lab_insintric/`: Hexagon HVX intrinsic variant. The folder name keeps the spelling requested in the task.
-- Both labs use the same generated decode fixture corpus in `fixtures/hqc128_decode_fixture.c`: 16 deterministic random HQC-128 codewords with 0..15 corrupted RS-symbol blocks and the expected recovered 16-byte messages.
+- Each lab has three parameter-set folders under `src/ref/`: `hqc-1/` (= HQC-128), `hqc-192/`, `hqc-256/`. Build scripts pick the right one via `-I src/ref/hqc-<set>`, so `parameters.h` and the RS `alpha_ij_pow` precomputed table resolve to the active variant. The shared sources in `src/ref/` (`gf.c`, `reed_muller.c`, `reed_solomon.c`) and `src/common/` (`fft.c`, `code.c`) are written against `PARAM_N1`, `PARAM_N2`, `PARAM_DELTA`, `PARAM_K`, `PARAM_G`, `PARAM_FFT`, `PARAM_M` and so are reused unchanged for all three security levels.
+- Each lab generates an independent 16-fixture corpus per set: `fixtures/hqc{128,192,256}_decode_fixture.c`, produced by `tools/gen_hqc{128,192,256}_decode_fixture.c` via the matching `scripts/gen_hqc{128,192,256}_decode_fixture.sh`. Run scripts auto-invoke the generator if the `.c` is missing.
+
+## Run commands
+
+HQC-128 (default):
+
+  `HQC128_BENCH_ITERS=100 bash hqc_lab_scalar/scripts/run_hqc128_decode_bench_hexagon.sh`
+  `HQC128_BENCH_ITERS=100 bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`
+
+HQC-192 and HQC-256 use the same script naming with the prefix swapped, and the matching `HQC192_BENCH_ITERS` / `HQC256_BENCH_ITERS` variable:
+
+  `HQC192_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc192_decode_bench_hexagon.sh`
+  `HQC256_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc256_decode_bench_hexagon.sh`
+
+## Parameter sets (from the HQC spec, 2025-08-22)
+
+| Set | PARAM_N1 | PARAM_N2 | PARAM_N1N2 | PARAM_DELTA | PARAM_K | PARAM_G | PARAM_FFT | RM multiplicity |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| HQC-128 | 46 | 384 | 17,664 | 15 | 16 | 31 | 4 | 3 |
+| HQC-192 | 56 | 640 | 35,840 | 16 | 24 | 33 | 5 | 5 |
+| HQC-256 | 90 | 640 | 57,600 | 29 | 32 | 59 | 5 | 5 |
+
+The RS field is the same GF(2^8) with primitive polynomial `0x11D` for every set. The per-set Reed-Solomon generator polynomial coefficients are encoded in `RS_POLY_COEFS` in each `parameters.h`. The `alpha_ij_pow[2*PARAM_DELTA][PARAM_N1-1]` table is precomputed and embedded in `src/ref/hqc-<set>/reed_solomon.h`.
+
+## HQC-192 / HQC-256 compatibility with the HQC-128 optimization passes
+
+The shared intrinsic source files inherit the full optimization stack (passes 1-12 below), but a few opt-in fast paths were originally written assuming HQC-128's specific parameters. The HQC-192/256 extension preserves all HQC-128 perf gains and adds explicit guards for the remaining mismatches:
+
+- `expand_and_sum_hvx` in `hqc_lab_insintric/src/ref/reed_muller.c` keeps the HQC-128 LUT and packed-arithmetic paths under `#if MULTIPLICITY == 3`, and falls back to a `MULTIPLICITY`-agnostic packed-halfword sum loop for HQC-192/256 (which both use `MULTIPLICITY = 5`). The fallback is selected automatically by the include path; no flag change is needed.
+- `HQC_RM_EXPAND_LUT` and `HQC_RM_FUSED_FAST` are HQC-128-only opt-ins; the file rejects them at compile time for any other `MULTIPLICITY`.
+- `HQC_RS_ROOTS_HVX` packs all `PARAM_N1` Chien-search support positions into one 64-lane HVX vector. HQC-128 (46 positions) and HQC-192 (56) fit; HQC-256 (90) does not. The reed_solomon.c file rejects the combination at compile time with a clear error.
+
+Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode correctly. The verified non-`#error` opt-ins so far are:
+
+| Flag | HQC-128 | HQC-192 | HQC-256 |
+| --- | :-: | :-: | :-: |
+| `HQC_USE_HVX_RS_SYNDROME` (default on) | ✅ | ✅ | ✅ |
+| `HQC_USE_GF_HWSTYLE_MUL` (default on) | ✅ | ✅ | ✅ |
+| `HQC_USE_GF_LUT_MUL` | ✅ | ✅ | ✅ |
+| `HQC_RM_EXPAND_LUT` | ✅ | `#error` | `#error` |
+| `HQC_RM_FUSED_FAST` | ✅ | `#error` | `#error` |
+| `HQC_RS_ROOTS_HVX` | ✅ | ✅ | `#error` |
 
 ## Implementation summary
 

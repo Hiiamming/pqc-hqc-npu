@@ -239,6 +239,9 @@ void expand_and_sum(rm_expanded_cdw *dest, rm_codeword_t src[]) {
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]) {
     uint64_t *out = (uint64_t *)*dest;
 
+#if MULTIPLICITY == 3
+    /* HQC-128 fast paths: the LUT and the arithmetic versions both consume
+     * exactly three source codewords. */
 #if defined(HQC_RM_EXPAND_LUT)
     if (!rm_expand3_nibble_table_ready) {
         init_rm_expand3_nibble_table();
@@ -269,6 +272,27 @@ void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]) {
                 expand_nibble_to_u16((w0 >> shift) & 0xfu) +
                 expand_nibble_to_u16((w1 >> shift) & 0xfu) +
                 expand_nibble_to_u16((w2 >> shift) & 0xfu);
+        }
+    }
+#endif
+#else
+    /* Generic path for MULTIPLICITY != 3 (HQC-192 and HQC-256, which both
+     * use MULTIPLICITY = 5). Same packed-halfword summation as the
+     * MULTIPLICITY=3 arithmetic path, just generalized over an arbitrary
+     * copy count. Per-lane sum is bounded by MULTIPLICITY, well within the
+     * 16-bit lane range. */
+    for (int32_t part = 0; part < 4; part++) {
+        uint32_t words[MULTIPLICITY];
+        for (int32_t copy = 0; copy < MULTIPLICITY; copy++) {
+            words[copy] = src[copy].u32[part];
+        }
+        for (int32_t nibble = 0; nibble < 8; nibble++) {
+            uint32_t shift = (uint32_t)(4 * nibble);
+            uint64_t acc = 0;
+            for (int32_t copy = 0; copy < MULTIPLICITY; copy++) {
+                acc += expand_nibble_to_u16((words[copy] >> shift) & 0xfu);
+            }
+            out[part * 8 + nibble] = acc;
         }
     }
 #endif

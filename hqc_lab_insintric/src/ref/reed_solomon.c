@@ -25,6 +25,14 @@
 #include <stdio.h>
 #endif
 
+/* The HVX Chien-search path packs PARAM_N1 support points into one 64-lane
+ * halfword vector and reads the first PARAM_N1 entries back. HQC-128 (N1=46)
+ * and HQC-192 (N1=56) fit; HQC-256 (N1=90) does not. Catch this at compile
+ * time rather than overflowing eval[64] at runtime. */
+#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_RS_ROOTS_HVX) && (PARAM_N1 > 64)
+#error "HQC_RS_ROOTS_HVX requires PARAM_N1 <= 64; HQC-256 (PARAM_N1=90) is not supported by this path."
+#endif
+
 static uint16_t mod(uint16_t i, uint16_t modulus);
 #if !defined(HQC_RS_ROOTS_FFT)
 static uint16_t ct_is_zero_u16(uint16_t x);
