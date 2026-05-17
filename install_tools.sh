@@ -2,17 +2,23 @@
 #
 # install_tools.sh — 安装 Hexagon SDK、Toolchain 和 H2 Hypervisor
 #
-# 用法:
-#   bash ch01-simulator-setup/install_tools.sh
+# 用法 (run from anywhere; the script always resolves paths relative to
+# its own directory, which is now the repo root):
+#   bash install_tools.sh
 #
-# 产出:
+# 产出 (sibling directories of this script):
 #   tools/hexagon-sdk   -> Hexagon SDK 6.4.0.2
 #   tools/h2-install    -> H2 Hypervisor (编译好的 booter + libh2)
+#   downloads/          -> cached SDK zip
 #
 set -euo pipefail
 
+# install_tools.sh lives at the repo root, so SCRIPT_DIR IS the repo root.
+# (Previously the script was at ch01-simulator-setup/install_tools.sh and
+# used SCRIPT_DIR/.. to climb to the repo root; that climb is no longer
+# correct after the move.)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ROOT_DIR="$SCRIPT_DIR"
 TOOLS_DIR="$ROOT_DIR/tools"
 DOWNLOADS_DIR="$ROOT_DIR/downloads"
 
