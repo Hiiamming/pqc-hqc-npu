@@ -25,13 +25,12 @@
 #include <stdio.h>
 #endif
 
-/* The HVX Chien-search path packs PARAM_N1 support points into one 64-lane
- * halfword vector and reads the first PARAM_N1 entries back. HQC-128 (N1=46)
- * and HQC-192 (N1=56) fit; HQC-256 (N1=90) does not. Catch this at compile
- * time rather than overflowing eval[64] at runtime. */
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_RS_ROOTS_HVX) && (PARAM_N1 > 64)
-#error "HQC_RS_ROOTS_HVX requires PARAM_N1 <= 64; HQC-256 (PARAM_N1=90) is not supported by this path."
-#endif
+/* The HVX Chien-search path now scales to PARAM_N1 up to 128 by splitting
+ * the support across multiple 64-lane halfword vectors. HQC-128 (N1=46) and
+ * HQC-192 (N1=56) use 1 vector; HQC-256 (N1=90) uses 2 vectors. The exact
+ * vector count is computed at compile time as RS_SUPPORT_VEC_COUNT inside
+ * the gated section below; that section refuses to compile if any future
+ * parameter set ever pushed PARAM_N1 beyond 128. */
 
 static uint16_t mod(uint16_t i, uint16_t modulus);
 #if !defined(HQC_RS_ROOTS_FFT)
@@ -428,22 +427,42 @@ static void compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree) {
 }
 
 #if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_RS_ROOTS_HVX) && !defined(HQC_RS_ROOTS_FFT)
-static uint16_t rs_support_powers[PARAM_DELTA + 1][64] __attribute__((aligned(128)));
+/* Lane-block count needed to cover all PARAM_N1 support positions with one
+ * or more 64-lane HVX halfword vectors.
+ *
+ *   HQC-128 : PARAM_N1 = 46  -> 1 vector  (18 padding lanes)
+ *   HQC-192 : PARAM_N1 = 56  -> 1 vector  ( 8 padding lanes)
+ *   HQC-256 : PARAM_N1 = 90  -> 2 vectors (38 padding lanes in the high vec)
+ *
+ * Padding lanes hold the value 0 in `rs_support_powers`, so they contribute
+ * `sigma[j] * 0 = 0` to the accumulator and never disturb the real lanes.
+ * Capped at 2 because no real HQC parameter set has PARAM_N1 > 128. */
+#define RS_SUPPORT_VEC_COUNT CEIL_DIVIDE(PARAM_N1, 64)
+#if RS_SUPPORT_VEC_COUNT > 2
+#error "HQC_RS_ROOTS_HVX assumes PARAM_N1 <= 128 (2 HVX halfword vectors)."
+#endif
+
+static uint16_t rs_support_powers[PARAM_DELTA + 1][RS_SUPPORT_VEC_COUNT * 64]
+    __attribute__((aligned(128)));
 static int rs_support_powers_ready = 0;
 
 /**
  * @brief Precompute x_i^j for the shortened RS support used by HVX Chien.
  *
  * Lane i corresponds to x_i = alpha^{-i} = gf_exp[255 - i] for i < PARAM_N1.
- * Lanes 46..63 are padding so the table can be loaded as one 128-byte HVX
- * vector. Those lanes are ignored when writing the error vector.
+ * Lanes [PARAM_N1, RS_SUPPORT_VEC_COUNT*64) are padding so each row can be
+ * loaded as one or more aligned 128-byte HVX vectors. Padding lanes carry 0,
+ * so they accumulate sigma(0) = sigma_0; the final scan only inspects the
+ * first PARAM_N1 lanes of `eval`, so those padding entries never reach
+ * `error[]`.
  */
 static void init_rs_support_powers(void) {
     if (rs_support_powers_ready) {
         return;
     }
 
-    for (size_t lane = 0; lane < 64; ++lane) {
+    const size_t total_lanes = (size_t)RS_SUPPORT_VEC_COUNT * 64;
+    for (size_t lane = 0; lane < total_lanes; ++lane) {
         uint16_t x = (lane < PARAM_N1) ? gf_exp[PARAM_GF_MUL_ORDER - lane] : 0;
         rs_support_powers[0][lane] = 1;
         for (size_t j = 1; j <= PARAM_DELTA; ++j) {
@@ -455,28 +474,44 @@ static void init_rs_support_powers(void) {
 }
 
 /**
- * @brief HVX Chien search over the shortened RS support.
+ * @brief HVX Chien search over the shortened RS support, multi-vector form.
  *
- * This evaluates sigma(x_i) = sum_j sigma_j x_i^j for all 46 support points
- * in parallel. It deliberately uses the fixed-flow vector GF multiplier rather
- * than the scalar GF table, because the win comes from evaluating all support
- * points at once.
+ * Evaluates sigma(x_i) = sum_j sigma_j x_i^j for all PARAM_N1 support points
+ * in parallel. For HQC-128 and HQC-192 the support fits in a single 64-lane
+ * halfword vector and the inner v-loop trivially unrolls to one vmul+vxor per
+ * sigma coefficient (identical code to the original single-vector version).
+ * For HQC-256 the support spans two vectors, so each sigma coefficient
+ * generates two vmul+vxor pairs.
+ *
+ * NOTE: For HQC-256, the default decode path uses the additive FFT
+ * (compute_roots in fft.c), which is asymptotically cheaper at delta=29
+ * (~256*log2(256) = 2048 GF muls) than Chien search (PARAM_N1 * delta =
+ * 90 * 29 = 2610 GF muls). This HVX Chien path is offered mainly as a
+ * benchmark experiment for HQC-256; the scalar FFT default may still win.
  */
 static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t degree) {
-    uint16_t eval[64] __attribute__((aligned(128)));
-    HVX_Vector acc = Q6_V_vzero();
+    uint16_t eval[RS_SUPPORT_VEC_COUNT * 64] __attribute__((aligned(128)));
+    HVX_Vector acc[RS_SUPPORT_VEC_COUNT];
+    for (int v = 0; v < RS_SUPPORT_VEC_COUNT; ++v) {
+        acc[v] = Q6_V_vzero();
+    }
 
     init_rs_support_powers();
     memset(error, 0, 1 << PARAM_M);
 
     for (size_t j = 0; j <= degree; ++j) {
         if (sigma[j] != 0) {
-            HVX_Vector powers = *(const HVX_Vector *)&rs_support_powers[j][0];
-            acc = Q6_V_vxor_VV(acc, gf_mul_scalar_by_vec_hvx(sigma[j], powers));
+            for (int v = 0; v < RS_SUPPORT_VEC_COUNT; ++v) {
+                HVX_Vector powers = *(const HVX_Vector *)&rs_support_powers[j][v * 64];
+                acc[v] = Q6_V_vxor_VV(acc[v],
+                                       gf_mul_scalar_by_vec_hvx(sigma[j], powers));
+            }
         }
     }
 
-    *(HVX_Vector *)&eval[0] = acc;
+    for (int v = 0; v < RS_SUPPORT_VEC_COUNT; ++v) {
+        *(HVX_Vector *)&eval[v * 64] = acc[v];
+    }
     for (size_t i = 0; i < PARAM_N1; ++i) {
         error[i] = (uint8_t)(eval[i] == 0);
     }

@@ -35,7 +35,7 @@ The shared intrinsic source files inherit the full optimization stack (passes 1-
 
 - `expand_and_sum_hvx` in `hqc_lab_insintric/src/ref/reed_muller.c` keeps the HQC-128 LUT and packed-arithmetic paths under `#if MULTIPLICITY == 3`, and falls back to a `MULTIPLICITY`-agnostic packed-halfword sum loop for HQC-192/256 (which both use `MULTIPLICITY = 5`). The fallback is selected automatically by the include path; no flag change is needed.
 - `HQC_RM_EXPAND_LUT` and `HQC_RM_FUSED_FAST` are HQC-128-only opt-ins; the file rejects them at compile time for any other `MULTIPLICITY`.
-- `HQC_RS_ROOTS_HVX` packs all `PARAM_N1` Chien-search support positions into one 64-lane HVX vector. HQC-128 (46 positions) and HQC-192 (56) fit; HQC-256 (90) does not. The reed_solomon.c file rejects the combination at compile time with a clear error.
+- `HQC_RS_ROOTS_HVX` packs all `PARAM_N1` Chien-search support positions across one or more 64-lane HVX vectors. HQC-128 (46 positions) and HQC-192 (56) use a single vector; HQC-256 (90) uses two. The vector count is `RS_SUPPORT_VEC_COUNT = CEIL_DIVIDE(PARAM_N1, 64)`, computed at compile time, and a `#error` rejects any hypothetical future PARAM_N1 > 128.
 
 Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode correctly. The verified non-`#error` opt-ins so far are:
 
@@ -46,7 +46,7 @@ Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode 
 | `HQC_USE_GF_LUT_MUL` | ✅ | ✅ | ✅ |
 | `HQC_RM_EXPAND_LUT` | ✅ | `#error` | `#error` |
 | `HQC_RM_FUSED_FAST` | ✅ | `#error` | `#error` |
-| `HQC_RS_ROOTS_HVX` | ✅ | ✅ | `#error` |
+| `HQC_RS_ROOTS_HVX` | ✅ | ✅ | ✅ (2-vector path) |
 
 ## Implementation summary
 
@@ -64,6 +64,7 @@ Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode 
 | 10 | Added benchmark-only fused RM expand/Hadamard/peak path for full decode. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_decode_one_hvx_fast`, `reed_muller_decode`; `hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`: `HQC_RM_FUSED_FAST` |
 | 11 | Tightened the fast RS algebra path: degree-bound BM auxiliary update, degree-bound z polynomial, and derivative-based Forney denominator. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_elp`, `compute_z_poly`, `compute_error_values`; `hqc_lab_insintric/demos/hqc128_decode_substage_bench.c` |
 | 12 | Added benchmark-only HVX Chien root evaluation across the 46 shortened RS support positions. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `rs_support_powers`; Hexagon scripts: `HQC_RS_ROOTS_HVX` |
+| 12b | Generalized `compute_roots_hvx` to multi-vector support so HQC-256 (PARAM_N1=90 > 64 lanes) works alongside HQC-128 / HQC-192. Vector count `RS_SUPPORT_VEC_COUNT = CEIL_DIVIDE(PARAM_N1, 64)`. HQC-128 / HQC-192 binaries are byte-identical to the single-vector version (compiler unrolls). NOTE: PQClean's HQC-256 reference uses additive FFT rather than Chien (FFT cost ~256·log2 256 = 2048 GF muls vs Chien 90·29 = 2610), so the scalar FFT default may still win at HQC-256. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `RS_SUPPORT_VEC_COUNT` |
 
 ## Implemented so far
 
