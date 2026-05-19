@@ -27,8 +27,8 @@
  */
 #define MULTIPLICITY CEIL_DIVIDE(PARAM_N2, 128)
 
-#if (MULTIPLICITY != 3)
-#error "The fastest RM path currently supports the HQC-128 RM multiplicity of 3"
+#if (MULTIPLICITY != 3) && (MULTIPLICITY != 5)
+#error "The fastest RM path supports the HQC-128 multiplicity of 3 and HQC-192/256 multiplicity of 5"
 #endif
 
 /**
@@ -52,6 +52,7 @@ static const int16_t rm_index_hi[64] __attribute__((aligned(128))) = {
     96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
     112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127};
 
+#if MULTIPLICITY == 3
 static uint64_t rm_expand3_nibble_table[4096] __attribute__((aligned(128)));
 static int rm_expand3_nibble_table_ready = 0;
 
@@ -68,8 +69,9 @@ static void init_rm_expand3_nibble_table(void) {
 
     rm_expand3_nibble_table_ready = 1;
 }
+#endif
 
-static inline void expand_three_rm_copies(uint64_t *out, const rm_codeword_t src[3]);
+static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[]);
 static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v);
 static inline HVX_Vector hvx_reduce_min_h(HVX_Vector v);
 static inline int32_t hvx_lane0_i16(HVX_Vector v);
@@ -104,7 +106,8 @@ static inline int32_t rm_peak_sign_bit(int32_t peak_value) {
     return (int32_t)(128u * (peak_nonzero & (peak_negative ^ 1u)));
 }
 
-static inline void expand_three_rm_copies(uint64_t *out, const rm_codeword_t src[3]) {
+static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[]) {
+#if MULTIPLICITY == 3
     if (!rm_expand3_nibble_table_ready) {
         init_rm_expand3_nibble_table();
     }
@@ -122,6 +125,23 @@ static inline void expand_three_rm_copies(uint64_t *out, const rm_codeword_t src
             out[part * 8 + nibble] = rm_expand3_nibble_table[index];
         }
     }
+#else
+    for (int32_t part = 0; part < 4; part++) {
+        uint32_t words[MULTIPLICITY];
+        for (int32_t copy = 0; copy < MULTIPLICITY; copy++) {
+            words[copy] = src[copy].u32[part];
+        }
+
+        for (int32_t nibble = 0; nibble < 8; nibble++) {
+            uint32_t shift = (uint32_t)(4 * nibble);
+            uint64_t acc = 0;
+            for (int32_t copy = 0; copy < MULTIPLICITY; copy++) {
+                acc += expand_nibble_to_u16((words[copy] >> shift) & 0xfu);
+            }
+            out[part * 8 + nibble] = acc;
+        }
+    }
+#endif
 }
 
 static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v) {
@@ -244,11 +264,12 @@ void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst) {
 /**
  * @brief HVX-friendly packed RM expansion.
  *
- * For HQC-128, MULTIPLICITY is 3. The fastest path uses a 4096-entry
- * three-nibble table to produce four packed halfword sums at a time.
+ * HQC-128 uses the measured fastest 3-copy LUT expansion. HQC-192/256 use
+ * the same packed halfword representation with arithmetic summation of 5
+ * repeated copies.
  */
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]) {
-    expand_three_rm_copies((uint64_t *)*dest, src);
+    expand_rm_copies_fast((uint64_t *)*dest, src);
 }
 
 /**
@@ -268,7 +289,7 @@ int32_t find_peaks_hvx(rm_expanded_cdw *transform) {
 /**
  * @brief Fused RM block decoder used by the only active intrinsic decode path.
  *
- * It expands the three RM copies, performs the HVX Hadamard transform, applies
+ * It expands the repeated RM copies, performs the HVX Hadamard transform, applies
  * the half-Hadamard correction, and runs the HVX peak reduction inside one
  * function. The standalone helpers remain available for substage profiling.
  */
@@ -276,7 +297,7 @@ static inline int32_t __attribute__((always_inline)) rm_decode_one_hvx_fast(rm_c
     rm_expanded_cdw expanded __attribute__((aligned(128)));
     rm_expanded_cdw transform __attribute__((aligned(128)));
 
-    expand_three_rm_copies((uint64_t *)expanded, src);
+    expand_rm_copies_fast((uint64_t *)expanded, src);
 
     int16_t *p1 = expanded;
     int16_t *p2 = transform;

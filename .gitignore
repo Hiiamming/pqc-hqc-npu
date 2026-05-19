@@ -1,0 +1,42 @@
+# Extracted SDKs and toolchains populated by
+# ch01-simulator-setup/install_tools.sh (very large; never commit these).
+/tools/*
+/downloads/*
+
+# Build outputs from the scalar and intrinsic labs.
+# Both scripts/run_*.sh and scripts/gen_*.sh write here, producing
+# Hexagon ELF binaries, host gcc binaries, and benchmark probes.
+build/
+**/build/
+
+# Compiled host/Hexagon test binary from ch01-simulator-setup/test_hvx_hmx.c
+# (the .c source is fine to track, the build output is not).
+
+# Common host / cross-compilation artefacts.
+*.o
+*.obj
+*.elf
+*.exe
+*.so
+*.a
+*.dylib
+*.dSYM/
+*.gch
+*.pch
+*.d
+
+# Editor / OS noise.
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Agent / harness state (worktrees, session files).
+.claude/
+
+# Ad-hoc local probe scripts and logs that don't belong in history.
+tmp_*.sh
+tmp_*.log

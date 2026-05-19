@@ -25,6 +25,20 @@
 #include <stdio.h>
 #endif
 
+/* The HVX Chien-search path now scales to PARAM_N1 up to 128 by splitting
+ * the support across multiple 64-lane halfword vectors. HQC-128 (N1=46) and
+ * HQC-192 (N1=56) use 1 vector; HQC-256 (N1=90) uses 2 vectors. The exact
+ * vector count is computed at compile time as RS_SUPPORT_VEC_COUNT inside
+ * the gated section below; that section refuses to compile if any future
+ * parameter set ever pushed PARAM_N1 beyond 128. */
+#define RS_SUPPORT_VEC_COUNT CEIL_DIVIDE(PARAM_N1, 64)
+#if RS_SUPPORT_VEC_COUNT > 2
+#error "The fastest HVX Chien path assumes PARAM_N1 <= 128"
+#endif
+#if (2 * PARAM_DELTA) > 64
+#error "The fastest HVX syndrome path assumes 2*PARAM_DELTA <= 64"
+#endif
+
 static uint16_t mod(uint16_t i, uint16_t modulus);
 static uint16_t ct_is_zero_u16(uint16_t x);
 static void compute_syndromes(uint16_t *syndromes, uint8_t *cdw);
@@ -284,22 +298,26 @@ static void compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree) {
     compute_roots_hvx(error, sigma, degree);
 }
 
-static uint16_t rs_support_powers[PARAM_DELTA + 1][64] __attribute__((aligned(128)));
+static uint16_t rs_support_powers[PARAM_DELTA + 1][RS_SUPPORT_VEC_COUNT * 64] __attribute__((aligned(128)));
 static int rs_support_powers_ready = 0;
 
 /**
  * @brief Precompute x_i^j for the shortened RS support used by HVX Chien.
  *
  * Lane i corresponds to x_i = alpha^{-i} = gf_exp[255 - i] for i < PARAM_N1.
- * Lanes 46..63 are padding so the table can be loaded as one 128-byte HVX
- * vector. Those lanes are ignored when writing the error vector.
+ * Lanes [PARAM_N1, RS_SUPPORT_VEC_COUNT*64) are padding so each row can be
+ * loaded as one or more aligned 128-byte HVX vectors. Padding lanes carry 0,
+ * so they accumulate sigma(0) = sigma_0; the final scan only inspects the
+ * first PARAM_N1 lanes of `eval`, so those padding entries never reach
+ * `error[]`.
  */
 static void init_rs_support_powers(void) {
     if (rs_support_powers_ready) {
         return;
     }
 
-    for (size_t lane = 0; lane < 64; ++lane) {
+    const size_t total_lanes = (size_t)RS_SUPPORT_VEC_COUNT * 64;
+    for (size_t lane = 0; lane < total_lanes; ++lane) {
         uint16_t x = (lane < PARAM_N1) ? gf_exp[PARAM_GF_MUL_ORDER - lane] : 0;
         rs_support_powers[0][lane] = 1;
         for (size_t j = 1; j <= PARAM_DELTA; ++j) {
@@ -311,27 +329,35 @@ static void init_rs_support_powers(void) {
 }
 
 /**
- * @brief HVX Chien search over the shortened RS support.
+ * @brief HVX Chien search over the shortened RS support, multi-vector form.
  *
  * This evaluates sigma(x_i) = sum_j sigma_j x_i^j for all 46 support points
  * in parallel. The fastest path loops only over the actual locator degree and
  * skips zero coefficients.
  */
 static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t degree) {
-    uint16_t eval[64] __attribute__((aligned(128)));
-    HVX_Vector acc = Q6_V_vzero();
+    uint16_t eval[RS_SUPPORT_VEC_COUNT * 64] __attribute__((aligned(128)));
+    HVX_Vector acc[RS_SUPPORT_VEC_COUNT];
+    for (int v = 0; v < RS_SUPPORT_VEC_COUNT; ++v) {
+        acc[v] = Q6_V_vzero();
+    }
 
     init_rs_support_powers();
     memset(error, 0, 1 << PARAM_M);
 
     for (size_t j = 0; j <= degree; ++j) {
         if (sigma[j] != 0) {
-            HVX_Vector powers = *(const HVX_Vector *)&rs_support_powers[j][0];
-            acc = Q6_V_vxor_VV(acc, gf_mul_scalar_by_vec_hvx(sigma[j], powers));
+            for (int v = 0; v < RS_SUPPORT_VEC_COUNT; ++v) {
+                HVX_Vector powers = *(const HVX_Vector *)&rs_support_powers[j][v * 64];
+                acc[v] = Q6_V_vxor_VV(acc[v],
+                                       gf_mul_scalar_by_vec_hvx(sigma[j], powers));
+            }
         }
     }
 
-    *(HVX_Vector *)&eval[0] = acc;
+    for (int v = 0; v < RS_SUPPORT_VEC_COUNT; ++v) {
+        *(HVX_Vector *)&eval[v * 64] = acc[v];
+    }
     for (size_t i = 0; i < PARAM_N1; ++i) {
         error[i] = (uint8_t)ct_is_zero_u16(eval[i]);
     }

@@ -1,10 +1,70 @@
-# HQC-128 Hexagon Lab Notes
+# HQC-{128,192,256} Hexagon Lab Notes
 
 ## Current layout
 
 - `hqc_lab_scalar/`: portable scalar C baseline. Its Hexagon decode benchmark intentionally builds without `-mhvx`.
 - `hqc_lab_insintric/`: Hexagon HVX intrinsic variant. The folder name keeps the spelling requested in the task.
-- Both labs use the same generated decode fixture corpus in `fixtures/hqc128_decode_fixture.c`: 16 deterministic random HQC-128 codewords with 0..15 corrupted RS-symbol blocks and the expected recovered 16-byte messages.
+- Each lab has three parameter-set folders under `src/ref/`: `hqc-1/` (= HQC-128), `hqc-192/`, `hqc-256/`. Build scripts pick the right one via `-I src/ref/hqc-<set>`, so `parameters.h` and the RS `alpha_ij_pow` precomputed table resolve to the active variant. The shared sources in `src/ref/` (`gf.c`, `reed_muller.c`, `reed_solomon.c`) and `src/common/` (`fft.c`, `code.c`) are written against `PARAM_N1`, `PARAM_N2`, `PARAM_DELTA`, `PARAM_K`, `PARAM_G`, `PARAM_FFT`, `PARAM_M` and so are reused unchanged for all three security levels.
+- Each lab generates an independent 16-fixture corpus per set: `fixtures/hqc{128,192,256}_decode_fixture.c`, produced by `tools/gen_hqc{128,192,256}_decode_fixture.c` via the matching `scripts/gen_hqc{128,192,256}_decode_fixture.sh`. Run scripts auto-invoke the generator if the `.c` is missing.
+
+## Run commands
+
+HQC-128 (default):
+
+  `HQC128_BENCH_ITERS=100 bash hqc_lab_scalar/scripts/run_hqc128_decode_bench_hexagon.sh`
+  `HQC128_BENCH_ITERS=100 bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`
+
+HQC-192 and HQC-256 use the same script naming with the prefix swapped, and the matching `HQC192_BENCH_ITERS` / `HQC256_BENCH_ITERS` variable:
+
+  `HQC192_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc192_decode_bench_hexagon.sh`
+  `HQC256_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc256_decode_bench_hexagon.sh`
+
+## Parameter sets (from the HQC spec, 2025-08-22)
+
+| Set | PARAM_N1 | PARAM_N2 | PARAM_N1N2 | PARAM_DELTA | PARAM_K | PARAM_G | PARAM_FFT | RM multiplicity |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| HQC-128 | 46 | 384 | 17,664 | 15 | 16 | 31 | 4 | 3 |
+| HQC-192 | 56 | 640 | 35,840 | 16 | 24 | 33 | 5 | 5 |
+| HQC-256 | 90 | 640 | 57,600 | 29 | 32 | 59 | 5 | 5 |
+
+The RS field is the same GF(2^8) with primitive polynomial `0x11D` for every set. The per-set Reed-Solomon generator polynomial coefficients are encoded in `RS_POLY_COEFS` in each `parameters.h`. The `alpha_ij_pow[2*PARAM_DELTA][PARAM_N1-1]` table is precomputed and embedded in `src/ref/hqc-<set>/reed_solomon.h`.
+
+## Default fastest intrinsic comparison across HQC-128/192/256
+
+These runs use the current `hqc_lab_insintric` default fastest Hexagon simulator path. The old fastest selector flags are no longer needed; the scripts compile directly with HVX/HMX enabled and the decode path selected by the active parameter-set include directory.
+
+Commands:
+
+  `HQC128_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`
+  `HQC192_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc192_decode_bench_hexagon.sh`
+  `HQC256_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc256_decode_bench_hexagon.sh`
+
+All three parameter sets used the 16-fixture corpus. Estimated Pcycles/decode uses `(10-iter Pcycles - 1-iter Pcycles) / (9 * 16)`.
+
+| Set | 1-iter result | 1-iter Pcycles | 10-iter result | 10-iter Pcycles | Estimated Pcycles/decode | Relative to HQC-128 |
+| --- | --- | ---: | --- | ---: | ---: | ---: |
+| HQC-128 | PASS | 4,426,449 | PASS | 12,865,581 | 58,605 | 1.00x |
+| HQC-192 | PASS | 6,164,940 | PASS | 31,104,852 | 173,194 | 2.96x |
+| HQC-256 | PASS | 8,047,161 | PASS | 48,302,166 | 279,549 | 4.77x |
+
+## HQC-192 / HQC-256 compatibility with the HQC-128 optimization passes
+
+The shared intrinsic source files inherit the full optimization stack (passes 1-12 below), but a few opt-in fast paths were originally written assuming HQC-128's specific parameters. The HQC-192/256 extension preserves all HQC-128 perf gains and adds explicit guards for the remaining mismatches:
+
+- `expand_and_sum_hvx` in `hqc_lab_insintric/src/ref/reed_muller.c` keeps the HQC-128 LUT and packed-arithmetic paths under `#if MULTIPLICITY == 3`, and falls back to a `MULTIPLICITY`-agnostic packed-halfword sum loop for HQC-192/256 (which both use `MULTIPLICITY = 5`). The fallback is selected automatically by the include path; no flag change is needed.
+- `HQC_RM_EXPAND_LUT` and `HQC_RM_FUSED_FAST` are HQC-128-only opt-ins; the file rejects them at compile time for any other `MULTIPLICITY`.
+- `HQC_RS_ROOTS_HVX` packs all `PARAM_N1` Chien-search support positions across one or more 64-lane HVX vectors. HQC-128 (46 positions) and HQC-192 (56) use a single vector; HQC-256 (90) uses two. The vector count is `RS_SUPPORT_VEC_COUNT = CEIL_DIVIDE(PARAM_N1, 64)`, computed at compile time, and a `#error` rejects any hypothetical future PARAM_N1 > 128.
+
+Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode correctly. The verified non-`#error` opt-ins so far are:
+
+| Flag | HQC-128 | HQC-192 | HQC-256 |
+| --- | :-: | :-: | :-: |
+| `HQC_USE_HVX_RS_SYNDROME` (default on) | ✅ | ✅ | ✅ |
+| `HQC_USE_GF_HWSTYLE_MUL` (default on) | ✅ | ✅ | ✅ |
+| `HQC_USE_GF_LUT_MUL` | ✅ | ✅ | ✅ |
+| `HQC_RM_EXPAND_LUT` | ✅ | `#error` | `#error` |
+| `HQC_RM_FUSED_FAST` | ✅ | `#error` | `#error` |
+| `HQC_RS_ROOTS_HVX` | ✅ | ✅ | ✅ (2-vector path) |
 
 ## Implementation summary
 
@@ -22,7 +82,9 @@
 | 10 | Added benchmark-only fused RM expand/Hadamard/peak path for full decode. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_decode_one_hvx_fast`, `reed_muller_decode`; `hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`: `HQC_RM_FUSED_FAST` |
 | 11 | Tightened the fast RS algebra path: degree-bound BM auxiliary update, degree-bound z polynomial, and derivative-based Forney denominator. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_elp`, `compute_z_poly`, `compute_error_values`; `hqc_lab_insintric/demos/hqc128_decode_substage_bench.c` |
 | 12 | Added benchmark-only HVX Chien root evaluation across the 46 shortened RS support positions. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `rs_support_powers`; Hexagon scripts: `HQC_RS_ROOTS_HVX` |
+| 12b | Generalized `compute_roots_hvx` to multi-vector support so HQC-256 (PARAM_N1=90 > 64 lanes) works alongside HQC-128 / HQC-192. Vector count `RS_SUPPORT_VEC_COUNT = CEIL_DIVIDE(PARAM_N1, 64)`. HQC-128 / HQC-192 binaries are byte-identical to the single-vector version (compiler unrolls). NOTE: PQClean's HQC-256 reference uses additive FFT rather than Chien (FFT cost ~256·log2 256 = 2048 GF muls vs Chien 90·29 = 2610), so the scalar FFT default may still win at HQC-256. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `RS_SUPPORT_VEC_COUNT` |
 | 13 | Promoted CT-safe default optimizations: fixed-loop HVX roots, fixed-flow RS-local GF arithmetic, derivative error values, and CT RM peak sign recovery. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `rs_gf_mul_ct`, `compute_roots_hvx`, `compute_error_values`; `hqc_lab_insintric/src/ref/reed_muller.c`: `find_peaks_hvx`, `rm_decode_one_hvx_fast`; Hexagon scripts default `HQC_RS_ROOTS_HVX=1`, `HQC_RM_FUSED_FAST=1` |
+
 
 ## Implemented so far
 

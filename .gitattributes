@@ -1,0 +1,41 @@
+# Pin line endings so the repo works the same on Linux/WSL and Windows.
+# Without this, Windows git's autocrlf converts LF -> CRLF on checkout, and
+# bash on WSL reads `bash\r` from the shebang and falls back to /bin/sh,
+# which then chokes on `set -euo pipefail`.
+
+# Shell scripts: must always be LF (Hexagon SDK is Linux-only, run via WSL).
+*.sh                text eol=lf
+
+# C / C++ / headers: LF for cross-platform consistency.
+*.c                 text eol=lf
+*.h                 text eol=lf
+*.cpp               text eol=lf
+*.hpp               text eol=lf
+
+# Build / config files commonly executed by Linux toolchains.
+Makefile            text eol=lf
+*.mk                text eol=lf
+*.cmake             text eol=lf
+CMakeLists.txt      text eol=lf
+
+# Documentation: LF (so diffs are clean between Linux contributors).
+*.md                text eol=lf
+*.txt               text eol=lf
+
+# Binary types: don't touch line endings, don't diff.
+*.elf               binary
+*.bin               binary
+*.o                 binary
+*.a                 binary
+*.so                binary
+*.dylib             binary
+*.exe               binary
+*.zip               binary
+*.tar               binary
+*.tar.gz            binary
+*.tgz               binary
+*.pdf               binary
+
+# Hexagon ELF artefacts (the build/ dir is gitignored, but if any leak in,
+# treat them as binary so git never mangles them).
+*.hexa              binary
