@@ -22,6 +22,7 @@
 | 10 | Added benchmark-only fused RM expand/Hadamard/peak path for full decode. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_decode_one_hvx_fast`, `reed_muller_decode`; `hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`: `HQC_RM_FUSED_FAST` |
 | 11 | Tightened the fast RS algebra path: degree-bound BM auxiliary update, degree-bound z polynomial, and derivative-based Forney denominator. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_elp`, `compute_z_poly`, `compute_error_values`; `hqc_lab_insintric/demos/hqc128_decode_substage_bench.c` |
 | 12 | Added benchmark-only HVX Chien root evaluation across the 46 shortened RS support positions. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `rs_support_powers`; Hexagon scripts: `HQC_RS_ROOTS_HVX` |
+| 13 | Promoted CT-safe default optimizations: fixed-loop HVX roots, fixed-flow RS-local GF arithmetic, derivative error values, and CT RM peak sign recovery. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `rs_gf_mul_ct`, `compute_roots_hvx`, `compute_error_values`; `hqc_lab_insintric/src/ref/reed_muller.c`: `find_peaks_hvx`, `rm_decode_one_hvx_fast`; Hexagon scripts default `HQC_RS_ROOTS_HVX=1`, `HQC_RM_FUSED_FAST=1` |
 
 ## Implemented so far
 
@@ -66,7 +67,7 @@ The seventh pass targeted the four measured bottlenecks from the substage table:
 - The original additive-FFT RS root finder is kept as an opt-in reference path. Set `HQC_RS_ROOTS_FFT=1` in the intrinsic host, full-decode, stage, or substage benchmark scripts to compare against the default Chien search.
 - RS error values keep the fixed-loop computation over `PARAM_DELTA = 15` and the 46 shortened RS positions by default. `HQC_RS_FAST_NON_CT=1` switches to an actual-located-error loop.
 
-This seventh pass is the current default constant-time-oriented path. Its default GF multiplication remains arithmetic and fixed-flow. `HQC_GF_LUT_MUL=1` is still available as an opt-in speed experiment, but it uses data-dependent table lookups and should not be treated as constant-time production crypto without a separate threat-model decision.
+This seventh pass was the first default constant-time-oriented path. Its default GF multiplication remains arithmetic and fixed-flow. `HQC_GF_LUT_MUL=1` is still available as an opt-in speed experiment, but it uses data-dependent table lookups and should not be treated as constant-time production crypto without a separate threat-model decision.
 
 The seventh pass now has two RS modes:
 
@@ -82,6 +83,10 @@ The tenth pass keeps the substage benchmark path unchanged and adds a full-decod
 The eleventh pass targets the remaining RS algebra in the side-channel-relaxed fastest mode. The current software path keeps the branchy Berlekamp-Massey shape instead of switching to the heavier inversionless BM architecture from Wu 2015, because the GF table path already makes inversions cheap and the inversionless update would multiply whole polynomials every iteration. The adopted changes are narrower: track the actual degree of the BM auxiliary polynomial `b`, compute `z(x)` only to the actual locator degree, and use the formal derivative of `sigma(x)` as the Forney denominator for error values. This reuses the Wu/Forney observation that the derivative/odd locator terms can replace the explicit product over all other error locators.
 
 The twelfth pass adds an opt-in HVX Chien search for the fastest mode. It precomputes the powers of the 46 shortened RS support points into aligned 64-lane vectors and evaluates `sigma(x)` as a vector sum of `sigma[j] * x^j`. This deliberately does not use the GF table path inside the vector operation; the measured win comes from evaluating all support positions in one HVX vector, while keeping the scalar Chien path as the default and as the fallback when `HQC_RS_ROOTS_HVX=0`.
+
+The thirteenth pass keeps the default side-channel-resistant strategy but moves the safe parts of the faster experiments into the default Hexagon build. The HVX Chien backend now has a default fixed-flow branch that always evaluates all `PARAM_DELTA + 1` locator coefficients, avoids the `sigma[j] != 0` branch, and writes only the public 46 shortened-support positions. Reed-Solomon now uses RS-local inlined fixed-flow GF multiply/square/inverse helpers when `HQC_USE_GF_HWSTYLE_MUL=1` and `HQC_GF_LUT_MUL=0`, removing call overhead without introducing secret-indexed tables. Default RS error values now use the formal derivative denominator in fixed `PARAM_DELTA` loops instead of multiplying over the other located errors. RM peak handling no longer loads `transform[peak_pos]` in the default path; it recovers the peak sign with vector compare/mux/reduction. The side-channel-relaxed fastest path keeps its old fused RM indexed load under `HQC_RS_FAST_NON_CT=1`, so the fastest benchmark result is unchanged.
+
+Current run note: `hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh` now runs the fastest path by default, so the old fastest env flags are no longer needed. Use `HQC128_BENCH_ITERS=10 ./hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh` for the standard simulator benchmark.
 
 ## Benchmark results
 
@@ -172,6 +177,10 @@ These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` means 160 total d
 | `hqc_lab_insintric` eleventh pass fast non-CT + GF table LUT + RM LUT + fused RM | 1 | 16 | PASS | 3,396,303 | 4,425,477 |
 | `hqc_lab_insintric` twelfth pass fast non-CT + GF table LUT + RM LUT + fused RM + HVX roots | 10 | 16 | PASS | 9,812,288 | 12,855,702 |
 | `hqc_lab_insintric` twelfth pass fast non-CT + GF table LUT + RM LUT + fused RM + HVX roots | 1 | 16 | PASS | 3,353,940 | 4,417,002 |
+| `hqc_lab_insintric` thirteenth pass CT default + CT-HVX roots + arithmetic fused RM | 10 | 16 | PASS | 35,648,131 | 43,766,676 |
+| `hqc_lab_insintric` thirteenth pass CT default + CT-HVX roots + arithmetic fused RM | 1 | 16 | PASS | 5,287,097 | 6,792,540 |
+| `hqc_lab_insintric` thirteenth pass fastest non-CT regression check | 10 | 16 | PASS | 9,812,288 | 12,855,702 |
+| `hqc_lab_insintric` thirteenth pass fastest non-CT regression check | 1 | 16 | PASS | 3,353,940 | 4,417,002 |
 
 | Variant | Corpus-estimated Pcycles/decode |
 | --- | ---: |
@@ -187,8 +196,10 @@ These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` means 160 total d
 | Tenth pass fast non-CT + GF table LUT + RM LUT + fused RM | 66,620 |
 | Eleventh pass fast non-CT + GF table LUT + RM LUT + fused RM | 60,834 |
 | Twelfth pass fast non-CT + GF table LUT + RM LUT + fused RM + HVX roots | 58,602 |
+| Thirteenth pass CT default + CT-HVX roots + arithmetic fused RM | 256,765 |
 
-On the corpus benchmark, the seventh-pass default CT path is about 58.4% faster than scalar and about 17.1% faster than the sixth pass. The seventh-pass fast non-CT path is about 72.1% faster than scalar and about 44.3% faster than the sixth pass, but it leaks decoded-error structure through branchy RS control flow. The twelfth-pass fastest measured combination is about 93.9% faster than scalar, about 47.4% faster than the eighth-pass fastest result, and about 3.7% faster than the eleventh-pass fastest result. It combines branchy RS leakage with data-dependent GF/RM table lookups, HVX root evaluation, and the fused RM benchmark path, so it remains benchmark-only.
+
+On the corpus benchmark, the seventh-pass default CT path is about 58.4% faster than scalar and about 17.1% faster than the sixth pass. The thirteenth-pass default CT path is about 73.1% faster than scalar, about 35.2% faster than the seventh-pass CT path, and about 46.3% faster than the sixth pass. The seventh-pass fast non-CT path is about 72.1% faster than scalar and about 44.3% faster than the sixth pass, but it leaks decoded-error structure through branchy RS control flow. The twelfth-pass fastest measured combination remains 58,602 Pcycles/decode after the thirteenth-pass changes. It combines branchy RS leakage with data-dependent GF/RM table lookups, HVX root evaluation, and the fused RM benchmark path, so it remains benchmark-only.
 
 Default intrinsic substage snapshots:
 
@@ -206,7 +217,7 @@ These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` and `HQC128_BENCH
 | RS error values | 39,174,546 | 20,303,742 | 131,047/decode |
 | RS correction | 18,277,167 | 18,213,798 | 440/decode |
 
-The dominant default-intrinsic costs are now RS error values, RM expand/sum, RS ELP, and RS roots/FFT. RM Hadamard, RM peak search, RS syndrome, and final correction are no longer primary targets.
+At that snapshot, the dominant default-intrinsic costs were RS error values, RM expand/sum, RS ELP, and RS roots/FFT. RM Hadamard, RM peak search, RS syndrome, and final correction were no longer primary targets.
 
 Seventh-pass CT substage snapshots with the default non-LUT fixed-flow GF path:
 
@@ -216,6 +227,16 @@ Seventh-pass CT substage snapshots with the default non-LUT fixed-flow GF path:
 | RS ELP | 33,139,155 | 17,343,702 | 109,691/decode | unchanged |
 | RS roots/Chien | 27,627,885 | 16,792,407 | 75,246/decode | 23.4% lower |
 | RS error values | 36,556,527 | 17,685,927 | 131,046/decode | unchanged |
+
+Thirteenth-pass CT default substage snapshots with fixed-flow RS-local GF helpers, fixed-loop HVX roots, derivative error values, and no default secret-indexed RM peak load:
+
+| Substage | 10-iter Pcycles | 1-iter Pcycles | Estimated cost | Change vs seventh-pass CT |
+| --- | ---: | ---: | ---: | ---: |
+| RS ELP | 24,466,578 | 12,678,789 | 81,860/decode | 25.4% lower |
+| RS roots/HVX Chien | 11,920,686 | 11,424,264 | 3,447/decode | 95.4% lower |
+| RS error values | 25,640,238 | 12,796,875 | 89,190/decode | 31.9% lower |
+
+Two full-decode isolation runs were used to check which default CT pieces mattered. With the thirteenth-pass RS arithmetic and error-value changes but both `HQC_RS_ROOTS_HVX=0` and `HQC_RM_FUSED_FAST=0`, full decode was 316,222 Pcycles/decode. With `HQC_RS_ROOTS_HVX=1` and `HQC_RM_FUSED_FAST=0`, it was 258,844 Pcycles/decode. With both thirteenth-pass defaults enabled, it was 256,765 Pcycles/decode. Most of the full-decode win therefore comes from fixed-flow HVX roots and RS arithmetic/error-value changes; arithmetic fused RM is a small default win after the CT peak-sign fix.
 
 Seventh-pass fast non-CT substage snapshots with opt-in GF LUT and non-fixed-flow RS/GF behavior:
 
@@ -279,6 +300,9 @@ These runs used `HQC_RS_FAST_NON_CT=1`, `HQC_GF_LUT_MUL=1`, `HQC_RM_EXPAND_LUT=1
 7. Done: target the current top four bottlenecks.
    The constant-time-oriented seventh pass keeps the safe wins: RM packed expansion and shortened Chien root search over public RS positions. The branchy BM and actual-error value experiments are still available behind `HQC_RS_FAST_NON_CT=1`, but the default path leaves them off because they make RS control flow depend on decoded error structure.
 
+8. Done: promote CT-safe versions of the strongest measured default-path ideas.
+   The thirteenth pass makes HVX Chien roots default only after removing the degree-dependent loop and coefficient-dependent branch from the default path. It also keeps GF arithmetic fixed-flow while inlining it into RS, uses the derivative denominator for error values with fixed `PARAM_DELTA` loops, and removes the default secret-indexed RM peak-value load. The fastest side-channel-relaxed path is still available and unchanged in measured Pcycles/decode.
+
 ## Confidence notes
 
 The safe second-pass step was candidate 1: replacing the scalar even/odd gather with HVX deal/deinterleave. It was narrower than rewriting `expand_and_sum`, kept the same data representation, and directly fixed a measured weakness in the first intrinsic pass.
@@ -287,7 +311,7 @@ The stage benchmark shows RS/GF is now the dominant default cost after RM intrin
 
 - A fuller `expand_and_sum` rewrite using `vlut16`, gather/scatter, or a data-layout change. It may no longer be the best next target because RM is no longer dominant.
 - A vectorized RS/GF path. This has higher upside, but proving correctness across all GF inputs and avoiding data-dependent lookup side channels are the main loopholes.
-- A deeper RS/RM stage benchmark. Done at substage granularity for the current intrinsic default. The next implementation should target RS error values, RM expand/sum, RS ELP, or RS roots/FFT, not RS syndrome or RM Hadamard.
+- A deeper RS/RM stage benchmark. Done at substage granularity for the current intrinsic default. After the thirteenth pass, RS roots are no longer a default bottleneck; the remaining default targets are RS error values, RS ELP, RM expand/sum, and z polynomial, not RS syndrome or RM Hadamard.
 
 The hardware-style GF path is the safest measured scalar improvement from the paper/Verilog review: it is correct for all 256x256 GF input pairs in a host self-test, passes host and simulator decode, and is fixed-flow arithmetic. The HVX syndrome path builds on that same arithmetic shape and is enabled because it maps independent syndrome lanes directly to HVX lanes. The opt-in GF LUT path is still factually faster on the simulator, but it should stay opt-in until the threat model accepts data-dependent table lookup on RS intermediate values.
 
@@ -302,3 +326,5 @@ For the tenth pass, confidence is scoped to the side-channel-relaxed full-decode
 For the eleventh pass, confidence is scoped to the side-channel-relaxed RS fast path. The loopholes checked were inversionless-BM normalization cost, stale high-degree `z` coefficients, incorrect Forney denominator scaling, benchmark helper signature drift, accidental default-path changes, and regression against the tenth-pass fastest result. The fixes/checks were: keep inversionless BM as a rejected strategy for this software/GF-LUT setting, keep the default CT-oriented ELP and z/error-value paths unchanged, clear unused fast `z` coefficients, pass `sigma` explicitly into the error-value helper, verify both default and fast host decode over the 16-fixture corpus, run default Hexagon 1-iter decode, rerun the affected RS ELP/z/error-values substage benchmarks, and rerun Hexagon full-decode 1-iter and 10-iter fastest benchmarks.
 
 For the twelfth pass, confidence is scoped to the side-channel-relaxed Hexagon HVX roots experiment. The loopholes checked were support-point ordering, invalid lanes 46..63, table initialization overhead, GF table versus HVX arithmetic tradeoff, accidental default-path changes, and full-decode regression. The fixes/checks were: precompute powers for exactly `gf_exp[PARAM_GF_MUL_ORDER - i]`, ignore lanes beyond `PARAM_N1`, gate the path behind `HQC_RS_ROOTS_HVX=1`, keep scalar Chien as the default, run host fast decode, run default Hexagon 1-iter decode, rerun RS roots substage 1-iter and 10-iter with the flag, and rerun Hexagon full-decode 1-iter and 10-iter fastest benchmarks with `HQC_RS_ROOTS_HVX=1`.
+
+For the thirteenth pass, confidence is scoped to software constant-time behavior, correctness on the 16-fixture corpus, and Hexagon simulator Pcycles. It is not a formal physical side-channel proof. The loopholes checked were accidental data-dependent GF/RM tables in the default path, degree-dependent HVX roots, coefficient-dependent HVX roots branches, secret-indexed RM peak-value loads, implementation-defined signed-shift masks, fastest-path regression, and accidental promotion of branchy RS code. The fixes/checks were: keep `HQC_GF_LUT_MUL=0` in the default scripts, evaluate all `PARAM_DELTA + 1` coefficients in default `compute_roots_hvx`, keep the branchy degree-bound roots only under `HQC_RS_FAST_NON_CT=1`, recover RM peak sign with vector compare/mux/reduction in the default path, replace several default masks with unsigned helpers, keep the fused RM indexed load only under `HQC_RS_FAST_NON_CT=1`, run host decode, run default Hexagon 1-iter and 10-iter full-decode benchmarks, rerun RS ELP/roots/error-values substage 1-iter and 10-iter benchmarks, and rerun the fastest non-CT 1-iter and 10-iter benchmarks to confirm it remains 58,602 Pcycles/decode.

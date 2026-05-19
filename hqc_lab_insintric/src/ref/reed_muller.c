@@ -1,11 +1,9 @@
 /**
  * @file reed_muller.c
- * @brief HQC-128 RM(1,7) codec with scalar fallback and Hexagon HVX decode paths.
+ * @brief HQC-128 RM(1,7) codec for the Hexagon fastest HVX path.
  *
- * The scalar helpers are kept as a reference-compatible fallback. The intrinsic
- * build accelerates expansion, Hadamard, and peak selection with HVX vectors.
- * Benchmark-only flags can additionally use an RM expansion LUT and a fused
- * full-decode RM block path.
+ * The intrinsic lab keeps the fastest measured decode path as the only active
+ * path: RM expansion LUT plus fused HVX expansion/Hadamard/peak selection.
  */
 
 #include "reed_muller.h"
@@ -14,10 +12,12 @@
 #include "data_structures.h"
 #include "parameters.h"
 
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
+#ifndef __hexagon__
+#error "hqc_lab_insintric is Hexagon-only; use hqc_lab_scalar for portable scalar builds"
+#endif
+
 #include <hexagon_protos.h>
 #include <hexagon_types.h>
-#endif
 
 /**
  * @brief Number of repeated 128-bit codeword blocks.
@@ -27,8 +27,8 @@
  */
 #define MULTIPLICITY CEIL_DIVIDE(PARAM_N2, 128)
 
-#if (defined(HQC_RM_EXPAND_LUT) || defined(HQC_RM_FUSED_FAST)) && (MULTIPLICITY != 3)
-#error "HQC_RM_EXPAND_LUT and HQC_RM_FUSED_FAST currently support the HQC-128 RM multiplicity of 3"
+#if (MULTIPLICITY != 3)
+#error "The fastest RM path currently supports the HQC-128 RM multiplicity of 3"
 #endif
 
 /**
@@ -38,8 +38,8 @@
 typedef int16_t rm_expanded_cdw[128];
 
 static inline uint64_t expand_nibble_to_u16(uint32_t x);
+static inline int32_t rm_peak_sign_bit(int32_t peak_value);
 
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
 static const int16_t rm_index_lo[64] __attribute__((aligned(128))) = {
     0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15,
     16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
@@ -52,7 +52,6 @@ static const int16_t rm_index_hi[64] __attribute__((aligned(128))) = {
     96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
     112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127};
 
-#if defined(HQC_RM_EXPAND_LUT)
 static uint64_t rm_expand3_nibble_table[4096] __attribute__((aligned(128)));
 static int rm_expand3_nibble_table_ready = 0;
 
@@ -69,8 +68,13 @@ static void init_rm_expand3_nibble_table(void) {
 
     rm_expand3_nibble_table_ready = 1;
 }
-#endif
-#endif
+
+static inline void expand_three_rm_copies(uint64_t *out, const rm_codeword_t src[3]);
+static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v);
+static inline HVX_Vector hvx_reduce_min_h(HVX_Vector v);
+static inline int32_t hvx_lane0_i16(HVX_Vector v);
+static inline int32_t rm_peak_from_hvx_rows(HVX_Vector row0, HVX_Vector row1);
+static inline int32_t rm_decode_one_hvx_fast(rm_codeword_t src[]);
 
 // clang-format off
 /**
@@ -84,19 +88,88 @@ static void init_rm_expand3_nibble_table(void) {
 // clang-format on
 
 void encode(rm_codeword_t *word, int32_t message);
-void hadamard(rm_expanded_cdw *src, rm_expanded_cdw *dst);
-void expand_and_sum(rm_expanded_cdw *dest, rm_codeword_t src[]);
-int32_t find_peaks(rm_expanded_cdw *transform);
-
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
 void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst);
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]);
 int32_t find_peaks_hvx(rm_expanded_cdw *transform);
-#endif
 
 static inline uint64_t expand_nibble_to_u16(uint32_t x) {
     return ((uint64_t)(x & 1u) << 0) | ((uint64_t)(x & 2u) << 15) |
            ((uint64_t)(x & 4u) << 30) | ((uint64_t)(x & 8u) << 45);
+}
+
+static inline int32_t rm_peak_sign_bit(int32_t peak_value) {
+    uint32_t peak_u = (uint32_t)peak_value;
+    uint32_t peak_nonzero = (peak_u | (uint32_t)-peak_u) >> 31;
+    uint32_t peak_negative = peak_u >> 31;
+    return (int32_t)(128u * (peak_nonzero & (peak_negative ^ 1u)));
+}
+
+static inline void expand_three_rm_copies(uint64_t *out, const rm_codeword_t src[3]) {
+    if (!rm_expand3_nibble_table_ready) {
+        init_rm_expand3_nibble_table();
+    }
+
+    for (int32_t part = 0; part < 4; part++) {
+        uint32_t w0 = src[0].u32[part];
+        uint32_t w1 = src[1].u32[part];
+        uint32_t w2 = src[2].u32[part];
+
+        for (int32_t nibble = 0; nibble < 8; nibble++) {
+            uint32_t shift = (uint32_t)(4 * nibble);
+            uint32_t index = ((w0 >> shift) & 0xfu) |
+                             (((w1 >> shift) & 0xfu) << 4) |
+                             (((w2 >> shift) & 0xfu) << 8);
+            out[part * 8 + nibble] = rm_expand3_nibble_table[index];
+        }
+    }
+}
+
+static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v) {
+    v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 64));
+    v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 32));
+    v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 16));
+    v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 8));
+    v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 4));
+    v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 2));
+    return v;
+}
+
+static inline HVX_Vector hvx_reduce_min_h(HVX_Vector v) {
+    v = Q6_Vh_vmin_VhVh(v, Q6_V_vror_VR(v, 64));
+    v = Q6_Vh_vmin_VhVh(v, Q6_V_vror_VR(v, 32));
+    v = Q6_Vh_vmin_VhVh(v, Q6_V_vror_VR(v, 16));
+    v = Q6_Vh_vmin_VhVh(v, Q6_V_vror_VR(v, 8));
+    v = Q6_Vh_vmin_VhVh(v, Q6_V_vror_VR(v, 4));
+    v = Q6_Vh_vmin_VhVh(v, Q6_V_vror_VR(v, 2));
+    return v;
+}
+
+static inline int32_t hvx_lane0_i16(HVX_Vector v) {
+    int16_t lane[64] __attribute__((aligned(128)));
+    *(HVX_Vector *)lane = v;
+    return lane[0];
+}
+
+static inline int32_t rm_peak_from_hvx_rows(HVX_Vector row0, HVX_Vector row1) {
+    HVX_Vector abs0 = Q6_Vh_vabs_Vh(row0);
+    HVX_Vector abs1 = Q6_Vh_vabs_Vh(row1);
+    HVX_Vector max_abs = hvx_reduce_max_h(Q6_Vh_vmax_VhVh(abs0, abs1));
+    int32_t target_abs_value = hvx_lane0_i16(max_abs);
+
+    HVX_Vector target = Q6_Vh_vsplat_R(target_abs_value);
+    HVX_Vector sentinel = Q6_Vh_vsplat_R(0x7fff);
+    HVX_Vector idx0 = *(const HVX_Vector *)rm_index_lo;
+    HVX_Vector idx1 = *(const HVX_Vector *)rm_index_hi;
+    HVX_Vector pos0 = Q6_V_vmux_QVV(Q6_Q_vcmp_eq_VhVh(abs0, target), idx0, sentinel);
+    HVX_Vector pos1 = Q6_V_vmux_QVV(Q6_Q_vcmp_eq_VhVh(abs1, target), idx1, sentinel);
+    int32_t peak_pos = hvx_lane0_i16(hvx_reduce_min_h(Q6_Vh_vmin_VhVh(pos0, pos1)));
+
+    int16_t rows[128] __attribute__((aligned(128)));
+    *(HVX_Vector *)&rows[0] = row0;
+    *(HVX_Vector *)&rows[64] = row1;
+    int32_t peak_value = rows[peak_pos];
+
+    return peak_pos | rm_peak_sign_bit(peak_value);
 }
 
 /**
@@ -139,34 +212,6 @@ void encode(rm_codeword_t *word, int32_t message) {
 }
 
 /**
- * @brief Scalar RM(1,7) Hadamard transform reference path.
- *
- * Perform the seven RM butterfly passes, alternating between src and dst.
- * The HVX build normally calls hadamard_hvx instead.
- *
- * @param[out] src Structure that contain the expanded codeword
- * @param[out] dst Structure that contain the expanded codeword
- */
-void hadamard(rm_expanded_cdw *src, rm_expanded_cdw *dst) {
-    // the passes move data:
-    // src -> dst -> src -> dst -> src -> dst -> src -> dst
-    // using p1 and p2 alternately
-    rm_expanded_cdw *p1 = src;
-    rm_expanded_cdw *p2 = dst;
-    for (int32_t pass = 0; pass < 7; pass++) {
-        for (int32_t i = 0; i < 64; i++) {
-            (*p2)[i] = (*p1)[2 * i] + (*p1)[2 * i + 1];
-            (*p2)[i + 64] = (*p1)[2 * i] - (*p1)[2 * i + 1];
-        }
-        // swap p1, p2 for next round
-        rm_expanded_cdw *p3 = p1;
-        p1 = p2;
-        p2 = p3;
-    }
-}
-
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
-/**
  * @brief HVX RM(1,7) Hadamard transform.
  *
  * Each pass loads two 64-lane halfword vectors, uses HVX deal/deinterleave
@@ -195,114 +240,17 @@ void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst) {
         p2 = p3;
     }
 }
-#endif
 
-/**
- * @brief Scalar expansion and summation of repeated RM codeword copies.
- *
- * Accesses memory in order
- * Note: this does not write the codewords as -1 or +1 as the green machine does
- * instead, just 0 and 1 is used.
- * The resulting hadamard transform has:
- * all values are halved
- * the first entry is 64 too high
- *
- * @param[out] dest Structure that contain the expanded codeword
- * @param[in] src Structure that contain the codeword
- */
-void expand_and_sum(rm_expanded_cdw *dest, rm_codeword_t src[]) {
-    // start with the first copy
-    for (int32_t part = 0; part < 4; part++) {
-        for (int32_t bit = 0; bit < 32; bit++) {
-            (*dest)[part * 32 + bit] = src[0].u32[part] >> bit & 1;
-        }
-    }
-    // sum the rest of the copies
-    for (int32_t copy = 1; copy < MULTIPLICITY; copy++) {
-        for (int32_t part = 0; part < 4; part++) {
-            for (int32_t bit = 0; bit < 32; bit++) {
-                (*dest)[part * 32 + bit] += src[copy].u32[part] >> bit & 1;
-            }
-        }
-    }
-}
-
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
 /**
  * @brief HVX-friendly packed RM expansion.
  *
- * For HQC-128, MULTIPLICITY is 3. The default intrinsic path expands four
- * bits at a time into packed 16-bit lanes and sums the three repeated copies
- * with integer arithmetic. HQC_RM_EXPAND_LUT=1 replaces the arithmetic with
- * a 4096-entry table from three nibbles to four packed halfword sums.
+ * For HQC-128, MULTIPLICITY is 3. The fastest path uses a 4096-entry
+ * three-nibble table to produce four packed halfword sums at a time.
  */
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]) {
-    uint64_t *out = (uint64_t *)*dest;
-
-#if defined(HQC_RM_EXPAND_LUT)
-    if (!rm_expand3_nibble_table_ready) {
-        init_rm_expand3_nibble_table();
-    }
-
-    for (int32_t part = 0; part < 4; part++) {
-        uint32_t w0 = src[0].u32[part];
-        uint32_t w1 = src[1].u32[part];
-        uint32_t w2 = src[2].u32[part];
-
-        for (int32_t nibble = 0; nibble < 8; nibble++) {
-            uint32_t shift = (uint32_t)(4 * nibble);
-            uint32_t index = ((w0 >> shift) & 0xfu) |
-                             (((w1 >> shift) & 0xfu) << 4) |
-                             (((w2 >> shift) & 0xfu) << 8);
-            out[part * 8 + nibble] = rm_expand3_nibble_table[index];
-        }
-    }
-#else
-    for (int32_t part = 0; part < 4; part++) {
-        uint32_t w0 = src[0].u32[part];
-        uint32_t w1 = src[1].u32[part];
-        uint32_t w2 = src[2].u32[part];
-
-        for (int32_t nibble = 0; nibble < 8; nibble++) {
-            uint32_t shift = (uint32_t)(4 * nibble);
-            out[part * 8 + nibble] =
-                expand_nibble_to_u16((w0 >> shift) & 0xfu) +
-                expand_nibble_to_u16((w1 >> shift) & 0xfu) +
-                expand_nibble_to_u16((w2 >> shift) & 0xfu);
-        }
-    }
-#endif
-}
-#endif
-
-/**
- * @brief Scalar peak selection for RM decode.
- *
- * This is the final step of the green machine: find the location of the highest value,
- * and add 128 if the peak is positive
- * if there are two identical peaks, the peak with smallest value
- * in the lowest 7 bits it taken
- * @param[in] transform Structure that contain the expanded codeword
- */
-int32_t find_peaks(rm_expanded_cdw *transform) {
-    int32_t peak_abs_value = 0;
-    int32_t peak_value = 0;
-    int32_t peak_pos = 0;
-    for (int32_t i = 0; i < 128; i++) {
-        // get absolute value
-        int32_t t = (*transform)[i];
-        int32_t pos_mask = -(t > 0);
-        int32_t absolute = (pos_mask & t) | (~pos_mask & -t);
-        peak_value = absolute > peak_abs_value ? t : peak_value;
-        peak_pos = absolute > peak_abs_value ? i : peak_pos;
-        peak_abs_value = absolute > peak_abs_value ? absolute : peak_abs_value;
-    }
-    // set bit 7
-    peak_pos |= 128 * (peak_value > 0);
-    return peak_pos;
+    expand_three_rm_copies((uint64_t *)*dest, src);
 }
 
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
 /**
  * @brief HVX absolute-maximum reduction with scalar-compatible tie-break.
  *
@@ -314,86 +262,21 @@ int32_t find_peaks(rm_expanded_cdw *transform) {
 int32_t find_peaks_hvx(rm_expanded_cdw *transform) {
     HVX_Vector row0 = *(const HVX_Vector *)&(*transform)[0];
     HVX_Vector row1 = *(const HVX_Vector *)&(*transform)[64];
-    HVX_Vector abs0 = Q6_Vh_vabs_Vh(row0);
-    HVX_Vector abs1 = Q6_Vh_vabs_Vh(row1);
-    HVX_Vector max_abs = Q6_Vh_vmax_VhVh(abs0, abs1);
-
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 64));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 32));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 16));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 8));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 4));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 2));
-
-    int16_t max_lane[64] __attribute__((aligned(128)));
-    *(HVX_Vector *)max_lane = max_abs;
-    int32_t target_abs_value = max_lane[0];
-
-    HVX_Vector target = Q6_Vh_vsplat_R(target_abs_value);
-    HVX_Vector sentinel = Q6_Vh_vsplat_R(0x7fff);
-    HVX_Vector idx0 = *(const HVX_Vector *)rm_index_lo;
-    HVX_Vector idx1 = *(const HVX_Vector *)rm_index_hi;
-    HVX_Vector pos0 = Q6_V_vmux_QVV(Q6_Q_vcmp_eq_VhVh(abs0, target), idx0, sentinel);
-    HVX_Vector pos1 = Q6_V_vmux_QVV(Q6_Q_vcmp_eq_VhVh(abs1, target), idx1, sentinel);
-    HVX_Vector peak_idx = Q6_Vh_vmin_VhVh(pos0, pos1);
-
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 64));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 32));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 16));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 8));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 4));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 2));
-
-    int16_t peak_lane[64] __attribute__((aligned(128)));
-    *(HVX_Vector *)peak_lane = peak_idx;
-    int32_t peak_pos = peak_lane[0];
-    int32_t peak_value = (*transform)[peak_pos];
-
-    peak_pos |= 128 * (peak_value > 0);
-    return peak_pos;
+    return rm_peak_from_hvx_rows(row0, row1);
 }
 
-#if defined(HQC_RM_FUSED_FAST)
 /**
- * @brief Benchmark-only fused RM block decoder.
+ * @brief Fused RM block decoder used by the only active intrinsic decode path.
  *
- * This path is enabled only by HQC_RM_FUSED_FAST on Hexagon. It expands the
- * three RM copies, performs the HVX Hadamard transform, applies the half-
- * Hadamard correction, and runs the HVX peak reduction inside one function.
- * It is used by the fastest full-decode benchmark to reduce handoff overhead;
- * the standalone substage helpers remain available for profiling.
+ * It expands the three RM copies, performs the HVX Hadamard transform, applies
+ * the half-Hadamard correction, and runs the HVX peak reduction inside one
+ * function. The standalone helpers remain available for substage profiling.
  */
 static inline int32_t __attribute__((always_inline)) rm_decode_one_hvx_fast(rm_codeword_t src[]) {
     rm_expanded_cdw expanded __attribute__((aligned(128)));
     rm_expanded_cdw transform __attribute__((aligned(128)));
-    uint64_t *out = (uint64_t *)expanded;
 
-#if defined(HQC_RM_EXPAND_LUT)
-    if (!rm_expand3_nibble_table_ready) {
-        init_rm_expand3_nibble_table();
-    }
-#endif
-
-    for (int32_t part = 0; part < 4; part++) {
-        uint32_t w0 = src[0].u32[part];
-        uint32_t w1 = src[1].u32[part];
-        uint32_t w2 = src[2].u32[part];
-
-        for (int32_t nibble = 0; nibble < 8; nibble++) {
-            uint32_t shift = (uint32_t)(4 * nibble);
-#if defined(HQC_RM_EXPAND_LUT)
-            uint32_t index = ((w0 >> shift) & 0xfu) |
-                             (((w1 >> shift) & 0xfu) << 4) |
-                             (((w2 >> shift) & 0xfu) << 8);
-            out[part * 8 + nibble] = rm_expand3_nibble_table[index];
-#else
-            out[part * 8 + nibble] =
-                expand_nibble_to_u16((w0 >> shift) & 0xfu) +
-                expand_nibble_to_u16((w1 >> shift) & 0xfu) +
-                expand_nibble_to_u16((w2 >> shift) & 0xfu);
-#endif
-        }
-    }
+    expand_three_rm_copies((uint64_t *)expanded, src);
 
     int16_t *p1 = expanded;
     int16_t *p2 = transform;
@@ -419,46 +302,8 @@ static inline int32_t __attribute__((always_inline)) rm_decode_one_hvx_fast(rm_c
 
     HVX_Vector row0 = *(const HVX_Vector *)&p1[0];
     HVX_Vector row1 = *(const HVX_Vector *)&p1[64];
-    HVX_Vector abs0 = Q6_Vh_vabs_Vh(row0);
-    HVX_Vector abs1 = Q6_Vh_vabs_Vh(row1);
-    HVX_Vector max_abs = Q6_Vh_vmax_VhVh(abs0, abs1);
-
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 64));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 32));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 16));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 8));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 4));
-    max_abs = Q6_Vh_vmax_VhVh(max_abs, Q6_V_vror_VR(max_abs, 2));
-
-    int16_t max_lane[64] __attribute__((aligned(128)));
-    *(HVX_Vector *)max_lane = max_abs;
-    int32_t target_abs_value = max_lane[0];
-
-    HVX_Vector target = Q6_Vh_vsplat_R(target_abs_value);
-    HVX_Vector sentinel = Q6_Vh_vsplat_R(0x7fff);
-    HVX_Vector idx0 = *(const HVX_Vector *)rm_index_lo;
-    HVX_Vector idx1 = *(const HVX_Vector *)rm_index_hi;
-    HVX_Vector pos0 = Q6_V_vmux_QVV(Q6_Q_vcmp_eq_VhVh(abs0, target), idx0, sentinel);
-    HVX_Vector pos1 = Q6_V_vmux_QVV(Q6_Q_vcmp_eq_VhVh(abs1, target), idx1, sentinel);
-    HVX_Vector peak_idx = Q6_Vh_vmin_VhVh(pos0, pos1);
-
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 64));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 32));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 16));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 8));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 4));
-    peak_idx = Q6_Vh_vmin_VhVh(peak_idx, Q6_V_vror_VR(peak_idx, 2));
-
-    int16_t peak_lane[64] __attribute__((aligned(128)));
-    *(HVX_Vector *)peak_lane = peak_idx;
-    int32_t peak_pos = peak_lane[0];
-    int32_t peak_value = p1[peak_pos];
-
-    peak_pos |= 128 * (peak_value > 0);
-    return peak_pos;
+    return rm_peak_from_hvx_rows(row0, row1);
 }
-#endif
-#endif
 
 /**
  * @brief Encodes the received word
@@ -487,11 +332,7 @@ void reed_muller_encode(uint64_t *cdw, const uint64_t *msg) {
 /**
  * @brief Decodes the received word
  *
- * The scalar fallback expands each repeated RM block, runs the scalar Hadamard
- * transform, corrects the half-Hadamard offset, and selects the peak. The
- * intrinsic build swaps in HVX expansion, Hadamard, and peak helpers. With
- * HQC_RM_FUSED_FAST=1, the fastest benchmark decodes each RM block through
- * rm_decode_one_hvx_fast instead of calling the helpers separately.
+ * The intrinsic lab decodes every RM block through the fused fastest path.
  *
  * For a more complete picture on Reed-Muller decoding, see MacWilliams, Florence
  * Jessie, and Neil James Alexander Sloane. The theory of error-correcting codes codes @cite macwilliams1977theory
@@ -502,32 +343,7 @@ void reed_muller_encode(uint64_t *cdw, const uint64_t *msg) {
 void reed_muller_decode(uint64_t *msg, const uint64_t *cdw) {
     uint8_t *message_array = (uint8_t *)msg;
     rm_codeword_t *codeArray = (rm_codeword_t *)cdw;
-    rm_expanded_cdw expanded __attribute__((aligned(128)));
     for (size_t i = 0; i < VEC_N1_SIZE_BYTES; i++) {
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_RM_FUSED_FAST)
         message_array[i] = rm_decode_one_hvx_fast(&codeArray[i * MULTIPLICITY]);
-#else
-        // collect the codewords
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
-        expand_and_sum_hvx(&expanded, &codeArray[i * MULTIPLICITY]);
-#else
-        expand_and_sum(&expanded, &codeArray[i * MULTIPLICITY]);
-#endif
-        // apply hadamard transform
-        rm_expanded_cdw transform __attribute__((aligned(128)));
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
-        hadamard_hvx(&expanded, &transform);
-#else
-        hadamard(&expanded, &transform);
-#endif
-        // fix the first entry to get the half Hadamard transform
-        transform[0] -= 64 * MULTIPLICITY;
-        // finish the decoding
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
-        message_array[i] = find_peaks_hvx(&transform);
-#else
-        message_array[i] = find_peaks(&transform);
-#endif
-#endif
     }
 }

@@ -2,9 +2,8 @@
  * @file gf.c
  * @brief GF(2^8) arithmetic for the HQC-128 intrinsic lab.
  *
- * The default intrinsic build uses a fixed-flow hardware-style xtime/xor
- * multiplier. The benchmark-only HQC_USE_GF_LUT_MUL path replaces GF
- * multiplication and inversion with data-dependent lookup tables.
+ * The intrinsic lab uses the fastest measured simulator path by default:
+ * GF multiplication and inversion go through lookup tables.
  */
 
 #include "gf.h"
@@ -12,14 +11,9 @@
 #include "parameters.h"
 
 static uint16_t gf_reduce(uint16_t x);
-#if defined(HQC_USE_GF_HWSTYLE_MUL)
-static uint16_t gf_mul_hwstyle(uint16_t a, uint16_t b);
-#endif
-#if defined(HQC_USE_GF_LUT_MUL)
 static void gf_mul_table_init(void);
 static uint8_t gf_mul_table[256][256];
 static int gf_mul_table_ready = 0;
-#endif
 void gf_carryless_mul(uint8_t *c, uint8_t a, uint8_t b);
 
 /**
@@ -156,40 +150,6 @@ void gf_carryless_mul(uint8_t *c, uint8_t a, uint8_t b) {
     c[1] = h;
 }
 
-#if defined(HQC_USE_GF_HWSTYLE_MUL)
-static inline uint16_t gf_xtime(uint16_t x) {
-    uint16_t carry = x >> 7;
-    return (uint16_t)(((x << 1) ^ (0x1d & (uint16_t)-carry)) & 0xff);
-}
-
-static uint16_t gf_mul_hwstyle(uint16_t a, uint16_t b) {
-    uint16_t acc = 0;
-    a &= 0xff;
-    b &= 0xff;
-
-#define GF_MUL_HWSTYLE_STEP(bit)             \
-    do {                                     \
-        uint16_t bit_mask = (uint16_t)-((b >> (bit)) & 1); \
-        acc = gf_xtime(acc);                 \
-        acc ^= a & bit_mask;                 \
-    } while (0)
-
-    GF_MUL_HWSTYLE_STEP(7);
-    GF_MUL_HWSTYLE_STEP(6);
-    GF_MUL_HWSTYLE_STEP(5);
-    GF_MUL_HWSTYLE_STEP(4);
-    GF_MUL_HWSTYLE_STEP(3);
-    GF_MUL_HWSTYLE_STEP(2);
-    GF_MUL_HWSTYLE_STEP(1);
-    GF_MUL_HWSTYLE_STEP(0);
-
-#undef GF_MUL_HWSTYLE_STEP
-
-    return acc;
-}
-#endif
-
-#if defined(HQC_USE_GF_LUT_MUL)
 static void gf_mul_table_init(void) {
     for (uint16_t a = 1; a < 256; ++a) {
         for (uint16_t b = 1; b < 256; ++b) {
@@ -203,7 +163,6 @@ static void gf_mul_table_init(void) {
 
     gf_mul_table_ready = 1;
 }
-#endif
 
 /**
  * Multiplies two elements of GF(2^GF_M).
@@ -212,19 +171,10 @@ static void gf_mul_table_init(void) {
  * @param[in] b Element of GF(2^GF_M)
  */
 uint16_t gf_mul(uint16_t a, uint16_t b) {
-#if defined(HQC_USE_GF_LUT_MUL)
     if (!gf_mul_table_ready) {
         gf_mul_table_init();
     }
     return gf_mul_table[(uint8_t)a][(uint8_t)b];
-#elif defined(HQC_USE_GF_HWSTYLE_MUL)
-    return gf_mul_hwstyle(a, b);
-#else
-    uint8_t c[2] = {0};
-    gf_carryless_mul(c, (uint8_t)a, (uint8_t)b);
-    uint16_t tmp = (uint16_t)(c[0] ^ (c[1] << 8));
-    return gf_reduce(tmp);
-#endif
 }
 
 /**
@@ -250,26 +200,8 @@ uint16_t gf_square(uint16_t a) {
  * @param[in] a Element of GF(2^GF_M)
  */
 uint16_t gf_inverse(uint16_t a) {
-#if defined(HQC_USE_GF_LUT_MUL)
     if (a == 0) {
         return 0;
     }
     return gf_exp[PARAM_GF_MUL_ORDER - gf_log[(uint8_t)a]];
-#else
-    uint16_t inv = a;
-    uint16_t tmp1, tmp2;
-
-    inv = gf_square(a);       /* a^2 */
-    tmp1 = gf_mul(inv, a);    /* a^3 */
-    inv = gf_square(inv);     /* a^4 */
-    tmp2 = gf_mul(inv, tmp1); /* a^7 */
-    tmp1 = gf_mul(inv, tmp2); /* a^11 */
-    inv = gf_mul(tmp1, inv);  /* a^15 */
-    inv = gf_square(inv);     /* a^30 */
-    inv = gf_square(inv);     /* a^60 */
-    inv = gf_square(inv);     /* a^120 */
-    inv = gf_mul(inv, tmp2);  /* a^127 */
-    inv = gf_square(inv);     /* a^254 */
-    return inv;
-#endif
 }

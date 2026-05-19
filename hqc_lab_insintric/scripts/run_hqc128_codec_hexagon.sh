@@ -32,7 +32,6 @@ mkdir -p "$(dirname "$OUT")"
 SRCS=(
     "$PROJECT_DIR/demos/hqc128_codec_demo.c"
     "$PROJECT_DIR/src/common/code.c"
-    "$PROJECT_DIR/src/common/fft.c"
     "$PROJECT_DIR/src/ref/gf.c"
     "$PROJECT_DIR/src/ref/reed_muller.c"
     "$PROJECT_DIR/src/ref/reed_solomon.c"
@@ -42,7 +41,6 @@ echo "=== Compiling HQC-128 codec for Hexagon ==="
 "$CLANG" -O2 -mv75 \
     -mhvx -mhvx-length=128B \
     -mhmx \
-    -DHQC_USE_HVX_INTRINSICS=1 \
     -DARCHV=75 \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \

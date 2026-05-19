@@ -1,43 +1,37 @@
 /**
  * @file reed_solomon.c
- * @brief HQC-128 Reed-Solomon codec with scalar, HVX, and benchmark fast paths.
+ * @brief HQC-128 Reed-Solomon codec for the Hexagon fastest HVX path.
  *
- * The default intrinsic build keeps fixed-flow ELP and error-value logic, while
- * using Hexagon HVX for syndrome computation and shortened-support Chien root
- * search. Benchmark-only flags enable branchy RS algebra, GF lookup tables,
- * and HVX root evaluation when side-channel behavior is outside the current
- * benchmark scope.
+ * The intrinsic lab keeps the fastest measured simulator path as the only
+ * active path: GF lookup tables, branchy RS algebra, HVX syndrome, and HVX
+ * shortened-support Chien root search.
  */
 
 #include "reed_solomon.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include "fft.h"
 #include "gf.h"
 #include "parameters.h"
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && (defined(HQC_USE_HVX_RS_SYNDROME) || defined(HQC_RS_ROOTS_HVX))
+
+#ifndef __hexagon__
+#error "hqc_lab_insintric is Hexagon-only; use hqc_lab_scalar for portable scalar builds"
+#endif
+
 #include <hexagon_protos.h>
 #include <hexagon_types.h>
-#endif
 #ifdef VERBOSE
 #include <stdbool.h>
 #include <stdio.h>
 #endif
 
 static uint16_t mod(uint16_t i, uint16_t modulus);
-#if !defined(HQC_RS_ROOTS_FFT)
 static uint16_t ct_is_zero_u16(uint16_t x);
-#endif
 static void compute_syndromes(uint16_t *syndromes, uint8_t *cdw);
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_USE_HVX_RS_SYNDROME)
 static void compute_syndromes_hvx(uint16_t *syndromes, uint8_t *cdw);
-#endif
 static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes);
 static void compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree);
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_RS_ROOTS_HVX) && !defined(HQC_RS_ROOTS_FFT)
 static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t degree);
-#endif
 static void compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t degree, const uint16_t *syndromes);
 static void compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree);
 static void correct_errors(uint8_t *cdw, const uint16_t *error_values);
@@ -59,11 +53,9 @@ static uint16_t mod(uint16_t i, uint16_t modulus) {
     return tmp + (mask & modulus);
 }
 
-#if !defined(HQC_RS_ROOTS_FFT)
 static uint16_t ct_is_zero_u16(uint16_t x) {
     return (uint16_t)(1 ^ (((uint16_t)(x | (uint16_t)-x)) >> 15));
 }
-#endif
 
 /**
  * @brief Computes the generator polynomial of the primitive Reed-Solomon code with given parameters.
@@ -138,28 +130,16 @@ void reed_solomon_encode(uint64_t *cdw, const uint64_t *msg) {
 /**
  * @brief Computes 2 * PARAM_DELTA syndromes
  *
- * The intrinsic Hexagon build uses compute_syndromes_hvx by default. It maps
- * the 30 syndrome lanes into one HVX vector and multiplies each received byte
- * by the pre-transposed alpha powers with a fixed-flow vector GF multiplier.
+ * The fastest path maps the 30 syndrome lanes into one HVX vector and
+ * multiplies each received byte by the pre-transposed alpha powers.
  *
  * @param[out] syndromes Array of size 2 * PARAM_DELTA receiving the computed syndromes
  * @param[in] cdw Array of size PARAM_N1 storing the received vector
  */
 void compute_syndromes(uint16_t *syndromes, uint8_t *cdw) {
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_USE_HVX_RS_SYNDROME)
     compute_syndromes_hvx(syndromes, cdw);
-#else
-    for (size_t i = 0; i < 2 * PARAM_DELTA; ++i) {
-        for (size_t j = 1; j < PARAM_N1; ++j) {
-            syndromes[i] ^= gf_mul(cdw[j], alpha_ij_pow[i][j - 1]);
-        }
-        syndromes[i] ^= cdw[0];
-    }
-#endif
 }
 
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && (defined(HQC_USE_HVX_RS_SYNDROME) || defined(HQC_RS_ROOTS_HVX))
-#if defined(HQC_USE_HVX_RS_SYNDROME)
 static uint16_t alpha_ji_pow[PARAM_N1 - 1][64] __attribute__((aligned(128)));
 static int alpha_ji_pow_ready = 0;
 
@@ -176,7 +156,6 @@ static void init_alpha_ji_pow(void) {
 
     alpha_ji_pow_ready = 1;
 }
-#endif
 
 static inline HVX_Vector gf_xtime_hvx(HVX_Vector x) {
     HVX_Vector zero = Q6_V_vzero();
@@ -217,7 +196,6 @@ static HVX_Vector gf_mul_scalar_by_vec_hvx(uint16_t a, HVX_Vector b) {
     return acc;
 }
 
-#if defined(HQC_USE_HVX_RS_SYNDROME)
 static void compute_syndromes_hvx(uint16_t *syndromes, uint8_t *cdw) {
     uint16_t out[64] __attribute__((aligned(128)));
     HVX_Vector acc = Q6_V_vzero();
@@ -234,32 +212,18 @@ static void compute_syndromes_hvx(uint16_t *syndromes, uint8_t *cdw) {
     *(HVX_Vector *)&out[0] = acc;
     memcpy(syndromes, out, 2 * PARAM_DELTA * sizeof(uint16_t));
 }
-#endif
-#endif
 
 /**
  * @brief Computes the error locator polynomial (ELP) sigma
  *
- * The default path is a masked fixed-flow Berlekamp-Massey implementation
- * (see @cite lin1983error, Chapter 6, BCH codes). HQC_RS_FAST_NON_CT=1
- * switches to a branchy benchmark path that tracks the actual locator degree
- * and the actual auxiliary-polynomial degree. That fast path is not promoted
- * to the side-channel-oriented default because its control flow depends on
- * decoded error structure.
- *
- * In the default masked path, we use the letter p for rho, initialized at -1.
- * The array X_sigma_p represents the
- * polynomial X^(mu-rho)*sigma_p(X). <br> Instead of maintaining a list of sigmas, we update in place both sigma and
- * X_sigma_p. <br> sigma_copy serves as a temporary save of sigma in case X_sigma_p needs to be updated. <br> We can
- * properly correct only if the degree of sigma does not exceed PARAM_DELTA. This means only the first PARAM_DELTA + 1
- * coefficients of sigma are of value and we only need to save its first PARAM_DELTA - 1 coefficients.
+ * The fastest path uses the branchy Berlekamp-Massey implementation that
+ * tracks the actual locator degree and auxiliary-polynomial degree.
  *
  * @returns the degree of the ELP sigma
  * @param[out] sigma Array of size (at least) PARAM_DELTA receiving the ELP
  * @param[in] syndromes Array of size (at least) 2*PARAM_DELTA storing the syndromes
  */
 static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
-#if defined(HQC_RS_FAST_NON_CT)
     uint16_t b[PARAM_DELTA + 1] = {0};
     uint16_t t[PARAM_DELTA + 1] = {0};
     uint16_t deg_sigma = 0;
@@ -305,121 +269,21 @@ static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
     }
 
     return deg_sigma;
-#else
-    uint16_t deg_sigma = 0;
-    uint16_t deg_sigma_p = 0;
-    uint16_t deg_sigma_copy = 0;
-    uint16_t sigma_copy[PARAM_DELTA + 1] = {0};
-    uint16_t X_sigma_p[PARAM_DELTA + 1] = {0, 1};
-    uint16_t pp = (uint16_t)-1;  // 2*rho
-    uint16_t d_p = 1;
-    uint16_t d = syndromes[0];
-
-    uint16_t mask1, mask2, mask12;
-    uint16_t deg_X, deg_X_sigma_p;
-    uint16_t dd;
-    uint16_t mu;
-
-    uint16_t i;
-
-    sigma[0] = 1;
-    for (mu = 0; (mu < (2 * PARAM_DELTA)); ++mu) {
-        // Save sigma in case we need it to update X_sigma_p
-        memcpy(sigma_copy, sigma, 2 * (PARAM_DELTA));
-        deg_sigma_copy = deg_sigma;
-
-        dd = gf_mul(d, gf_inverse(d_p));
-
-        for (i = 1; (i <= mu + 1) && (i <= PARAM_DELTA); ++i) {
-            sigma[i] ^= gf_mul(dd, X_sigma_p[i]);
-        }
-
-        deg_X = mu - pp;
-        deg_X_sigma_p = deg_X + deg_sigma_p;
-
-        // mask1 = 0xffff if(d != 0) and 0 otherwise
-        mask1 = -((uint16_t)-d >> 15);
-
-        // mask2 = 0xffff if(deg_X_sigma_p > deg_sigma) and 0 otherwise
-        mask2 = -((uint16_t)(deg_sigma - deg_X_sigma_p) >> 15);
-
-        // mask12 = 0xffff if the deg_sigma increased and 0 otherwise
-        volatile uint16_t mask12__ = mask1 & mask2;
-        mask12 = mask12__;
-        deg_sigma ^= mask12 & (deg_X_sigma_p ^ deg_sigma);
-
-        if (mu == (2 * PARAM_DELTA - 1)) {
-            break;
-        }
-
-        pp ^= mask12 & (mu ^ pp);
-        d_p ^= mask12 & (d ^ d_p);
-        for (i = PARAM_DELTA; i; --i) {
-            X_sigma_p[i] = (mask12 & sigma_copy[i - 1]) ^ (~mask12 & X_sigma_p[i - 1]);
-        }
-
-        deg_sigma_p ^= mask12 & (deg_sigma_copy ^ deg_sigma_p);
-        d = syndromes[mu + 1];
-
-        for (i = 1; (i <= mu + 1) && (i <= PARAM_DELTA); ++i) {
-            d ^= gf_mul(sigma[i], syndromes[mu + 1 - i]);
-        }
-    }
-
-    return deg_sigma;
-#endif
 }
 
 /**
  * @brief Computes the error polynomial error from the error locator polynomial sigma
  *
- * The default backend is a fixed-flow Chien search over the public shortened
- * RS support. Define HQC_RS_ROOTS_FFT=1 to use the original additive-FFT
- * root-finding backend for differential testing and reference comparison.
- * Define HQC_RS_ROOTS_HVX=1 on Hexagon to evaluate the locator across all
- * PARAM_N1 shortened support positions in one HVX vector. The HVX roots path
- * is benchmark-only and gated separately from the default scalar Chien backend.
+ * The fastest path evaluates the locator across the PARAM_N1 shortened support
+ * positions in one HVX vector.
  *
  * @param[out] error Array of 2^PARAM_M elements receiving the error polynomial
  * @param[in] sigma Array of 2^PARAM_FFT elements storing the error locator polynomial
  */
 static void compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree) {
-#if defined(HQC_RS_ROOTS_FFT)
-    (void)degree;
-    uint16_t w[1 << PARAM_M] = {0};
-
-    fft(w, sigma, PARAM_DELTA + 1);
-    fft_retrieve_error_poly(error, w);
-#elif defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_RS_ROOTS_HVX)
     compute_roots_hvx(error, sigma, degree);
-#else
-#if !defined(HQC_RS_FAST_NON_CT)
-    (void)degree;
-#endif
-    memset(error, 0, 1 << PARAM_M);
-
-    for (size_t i = 0; i < PARAM_N1; ++i) {
-        uint16_t x = gf_exp[PARAM_GF_MUL_ORDER - i];
-#if defined(HQC_RS_FAST_NON_CT)
-        uint16_t acc = sigma[degree];
-
-        for (size_t j = degree; j; --j) {
-            acc = gf_mul(acc, x) ^ sigma[j - 1];
-        }
-#else
-        uint16_t acc = sigma[PARAM_DELTA];
-
-        for (size_t j = PARAM_DELTA; j; --j) {
-            acc = gf_mul(acc, x) ^ sigma[j - 1];
-        }
-#endif
-
-        error[i] = (uint8_t)ct_is_zero_u16(acc);
-    }
-#endif
 }
 
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS) && defined(HQC_RS_ROOTS_HVX) && !defined(HQC_RS_ROOTS_FFT)
 static uint16_t rs_support_powers[PARAM_DELTA + 1][64] __attribute__((aligned(128)));
 static int rs_support_powers_ready = 0;
 
@@ -450,9 +314,8 @@ static void init_rs_support_powers(void) {
  * @brief HVX Chien search over the shortened RS support.
  *
  * This evaluates sigma(x_i) = sum_j sigma_j x_i^j for all 46 support points
- * in parallel. It deliberately uses the fixed-flow vector GF multiplier rather
- * than the scalar GF table, because the win comes from evaluating all support
- * points at once.
+ * in parallel. The fastest path loops only over the actual locator degree and
+ * skips zero coefficients.
  */
 static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t degree) {
     uint16_t eval[64] __attribute__((aligned(128)));
@@ -470,18 +333,15 @@ static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t de
 
     *(HVX_Vector *)&eval[0] = acc;
     for (size_t i = 0; i < PARAM_N1; ++i) {
-        error[i] = (uint8_t)(eval[i] == 0);
+        error[i] = (uint8_t)ct_is_zero_u16(eval[i]);
     }
 }
-#endif
 
 /**
  * @brief Computes the polynomial z(x)
  *
- * The default path keeps masked PARAM_DELTA loops. In HQC_RS_FAST_NON_CT mode,
- * only coefficients up to the actual locator degree are computed and the
- * remaining coefficients are cleared so later fast stages cannot observe stale
- * stack contents.
+ * The fastest path computes only coefficients up to the actual locator degree
+ * and clears the remaining coefficients.
  *
  * See @cite lin1983error (Chapter 6 - BCH Codes) for more details.
  *
@@ -492,7 +352,6 @@ static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t de
  */
 static void compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t degree, const uint16_t *syndromes) {
     size_t i, j;
-#if defined(HQC_RS_FAST_NON_CT)
     z[0] = 1;
 
     for (i = 1; i <= PARAM_DELTA; ++i) {
@@ -512,38 +371,14 @@ static void compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t de
             z[i] ^= gf_mul(sigma[j], syndromes[i - j - 1]);
         }
     }
-#else
-    uint16_t mask;
-
-    z[0] = 1;
-
-    for (i = 1; i < PARAM_DELTA + 1; ++i) {
-        mask = -((uint16_t)(i - degree - 1) >> 15);
-        z[i] = mask & sigma[i];
-    }
-
-    z[1] ^= syndromes[0];
-
-    for (i = 2; i <= PARAM_DELTA; ++i) {
-        mask = -((uint16_t)(i - degree - 1) >> 15);
-        z[i] ^= mask & syndromes[i - 1];
-
-        for (j = 1; j < i; ++j) {
-            z[i] ^= mask & gf_mul(sigma[j], syndromes[i - j - 1]);
-        }
-    }
-#endif
 }
 
 /**
  * @brief Computes the error values
  *
- * The default path keeps fixed-loop masked placement of located errors. The
- * HQC_RS_FAST_NON_CT path first compacts actual error positions, then evaluates
+ * The fastest path compacts actual error positions, then evaluates
  * z(beta_i^{-1}) and uses the formal derivative sigma'(beta_i^{-1}) as the
- * Forney denominator. This avoids the explicit product over all other located
- * errors and follows the same derivative/odd-locator observation used in
- * Reed-Solomon error-evaluation literature.
+ * Forney denominator.
  *
  * See @cite lin1983error (Chapter 6 - BCH Codes) for more details.
  *
@@ -552,7 +387,6 @@ static void compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t de
  * @param[in] error Array storing the error
  */
 static void compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree) {
-#if defined(HQC_RS_FAST_NON_CT)
     uint16_t beta_j[PARAM_DELTA] = {0};
     size_t pos_j[PARAM_DELTA] = {0};
     size_t delta = 0;
@@ -585,67 +419,6 @@ static void compute_error_values(uint16_t *error_values, const uint16_t *z, cons
 
         error_values[pos_j[i]] = gf_mul(tmp1, gf_mul(beta_j[i], gf_inverse(sigma_derivative)));
     }
-#else
-    (void)sigma;
-    (void)degree;
-    uint16_t beta_j[PARAM_DELTA] = {0};
-    uint16_t e_j[PARAM_DELTA] = {0};
-
-    uint16_t delta_counter;
-    uint16_t delta_real_value;
-    uint16_t found;
-    uint16_t mask1;
-    uint16_t mask2;
-    uint16_t tmp1;
-    uint16_t tmp2;
-    uint16_t inverse;
-    uint16_t inverse_power_j;
-
-    // Compute the beta_{j_i} page 31 of the documentation
-    delta_counter = 0;
-    for (size_t i = 0; i < PARAM_N1; i++) {
-        found = 0;
-        mask1 = (uint16_t)(-((int32_t)error[i]) >> 31);  // error[i] != 0
-        for (size_t j = 0; j < PARAM_DELTA; j++) {
-            mask2 = ~((uint16_t)(-((int32_t)j ^ delta_counter) >> 31));  // j == delta_counter
-            beta_j[j] += mask1 & mask2 & gf_exp[i];
-            found += mask1 & mask2 & 1;
-        }
-        delta_counter += found;
-    }
-    delta_real_value = delta_counter;
-
-    // Compute the e_{j_i} page 31 of the documentation
-    for (size_t i = 0; i < PARAM_DELTA; ++i) {
-        tmp1 = 1;
-        tmp2 = 1;
-        inverse = gf_inverse(beta_j[i]);
-        inverse_power_j = 1;
-
-        for (size_t j = 1; j <= PARAM_DELTA; ++j) {
-            inverse_power_j = gf_mul(inverse_power_j, inverse);
-            tmp1 ^= gf_mul(inverse_power_j, z[j]);
-        }
-        for (size_t k = 1; k < PARAM_DELTA; ++k) {
-            tmp2 = gf_mul(tmp2, (1 ^ gf_mul(inverse, beta_j[(i + k) % PARAM_DELTA])));
-        }
-        mask1 = (uint16_t)(((int16_t)i - delta_real_value) >> 15);  // i < delta_real_value
-        e_j[i] = mask1 & gf_mul(tmp1, gf_inverse(tmp2));
-    }
-
-    // Place the delta e_{j_i} values at the right coordinates of the output vector
-    delta_counter = 0;
-    for (size_t i = 0; i < PARAM_N1; ++i) {
-        found = 0;
-        mask1 = (uint16_t)(-((int32_t)error[i]) >> 31);  // error[i] != 0
-        for (size_t j = 0; j < PARAM_DELTA; j++) {
-            mask2 = ~((uint16_t)(-((int32_t)j ^ delta_counter) >> 31));  // j == delta_counter
-            error_values[i] += mask1 & mask2 & e_j[j];
-            found += mask1 & mask2 & 1;
-        }
-        delta_counter += found;
-    }
-#endif
 }
 
 /**
@@ -666,9 +439,7 @@ static void correct_errors(uint8_t *cdw, const uint16_t *error_values) {
  * This function relies on six steps:
  * -# Compute the 2·PARAM_DELTA syndromes.
  * -# Compute the error-locator polynomial σ(x).
- * -# Find the roots of σ(x), using shortened-support Chien search by default,
- *    additive FFT only when HQC_RS_ROOTS_FFT=1, or HVX Chien when
- *    HQC_RS_ROOTS_HVX=1 on Hexagon.
+ * -# Find the roots of σ(x) with HVX shortened-support Chien search.
  * -# Compute the error-evaluator polynomial z(x).
  * -# Compute the error values at each located position.
  * -# Correct the received polynomial by subtracting the error values.

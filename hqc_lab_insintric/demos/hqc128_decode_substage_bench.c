@@ -21,38 +21,20 @@
 
 typedef int16_t rm_expanded_cdw[128];
 
-void expand_and_sum(rm_expanded_cdw *dest, rm_codeword_t src[]);
-void hadamard(rm_expanded_cdw *src, rm_expanded_cdw *dst);
-int32_t find_peaks(rm_expanded_cdw *transform);
-
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]);
 void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst);
 int32_t find_peaks_hvx(rm_expanded_cdw *transform);
-#endif
 
 static void rm_expand(rm_expanded_cdw *dest, rm_codeword_t *src) {
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
     expand_and_sum_hvx(dest, src);
-#else
-    expand_and_sum(dest, src);
-#endif
 }
 
 static void rm_hadamard(rm_expanded_cdw *src, rm_expanded_cdw *dst) {
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
     hadamard_hvx(src, dst);
-#else
-    hadamard(src, dst);
-#endif
 }
 
 static int32_t rm_peak(rm_expanded_cdw *transform) {
-#if defined(__hexagon__) && defined(HQC_USE_HVX_INTRINSICS)
     return find_peaks_hvx(transform);
-#else
-    return find_peaks(transform);
-#endif
 }
 
 static const char *stage_name(void) {
