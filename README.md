@@ -1,6 +1,8 @@
 # HQC-{128,192,256} Hexagon Lab Notes
 
 ## Current layout
+sysdump meminfo check DMA up better
+Qualcomm Profiler
 
 - `hqc_lab_scalar/`: portable scalar C baseline. Its Hexagon decode benchmark intentionally builds without `-mhvx`.
 - `hqc_lab_insintric/`: Hexagon HVX intrinsic variant. The folder name keeps the spelling requested in the task.
@@ -84,6 +86,9 @@ Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode 
 | 12 | Added benchmark-only HVX Chien root evaluation across the 46 shortened RS support positions. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `rs_support_powers`; Hexagon scripts: `HQC_RS_ROOTS_HVX` |
 | 12b | Generalized `compute_roots_hvx` to multi-vector support so HQC-256 (PARAM_N1=90 > 64 lanes) works alongside HQC-128 / HQC-192. Vector count `RS_SUPPORT_VEC_COUNT = CEIL_DIVIDE(PARAM_N1, 64)`. HQC-128 / HQC-192 binaries are byte-identical to the single-vector version (compiler unrolls). NOTE: PQClean's HQC-256 reference uses additive FFT rather than Chien (FFT cost ~256·log2 256 = 2048 GF muls vs Chien 90·29 = 2610), so the scalar FFT default may still win at HQC-256. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `RS_SUPPORT_VEC_COUNT` |
 | 13 | Promoted CT-safe default optimizations: fixed-loop HVX roots, fixed-flow RS-local GF arithmetic, derivative error values, and CT RM peak sign recovery. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `rs_gf_mul_ct`, `compute_roots_hvx`, `compute_error_values`; `hqc_lab_insintric/src/ref/reed_muller.c`: `find_peaks_hvx`, `rm_decode_one_hvx_fast`; Hexagon scripts default `HQC_RS_ROOTS_HVX=1`, `HQC_RM_FUSED_FAST=1` |
+| 14 | Reduced fastest benchmark-only RM expand loop overhead by unrolling the HQC-128 3-copy word/nibble table lookups. | `hqc_lab_insintric/src/ref/reed_muller.c`: `expand_rm_copies_fast` |
+| 15 | Reduced fastest benchmark-only RM Hadamard loop overhead by unrolling the seven fixed HVX butterfly passes. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_hadamard_rows_hvx` |
+| 16 | Reduced fastest benchmark-only RS loop overhead by unrolling fixed-bound syndrome, ELP, error scan, and correction loops. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_syndromes_hvx`, `compute_elp`, `compute_error_values`, `correct_errors` |
 
 
 ## Implemented so far
@@ -243,6 +248,12 @@ These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` means 160 total d
 | `hqc_lab_insintric` thirteenth pass CT default + CT-HVX roots + arithmetic fused RM | 1 | 16 | PASS | 5,287,097 | 6,792,540 |
 | `hqc_lab_insintric` thirteenth pass fastest non-CT regression check | 10 | 16 | PASS | 9,812,288 | 12,855,702 |
 | `hqc_lab_insintric` thirteenth pass fastest non-CT regression check | 1 | 16 | PASS | 3,353,940 | 4,417,002 |
+| `hqc_lab_insintric` fourteenth pass fastest non-CT + unrolled RM expand LUT | 10 | 16 | PASS | 8,373,094 | 11,653,638 |
+| `hqc_lab_insintric` fourteenth pass fastest non-CT + unrolled RM expand LUT | 1 | 16 | PASS | 3,219,674 | 4,307,034 |
+| `hqc_lab_insintric` fifteenth pass fastest non-CT + unrolled RM expand LUT + unrolled RM Hadamard | 10 | 16 | PASS | 8,277,490 | 11,587,602 |
+| `hqc_lab_insintric` fifteenth pass fastest non-CT + unrolled RM expand LUT + unrolled RM Hadamard | 1 | 16 | PASS | 3,210,182 | 4,300,614 |
+| `hqc_lab_insintric` sixteenth pass fastest non-CT + unrolled RM + unrolled RS fixed loops | 10 | 16 | PASS | 8,049,062 | 11,272,635 |
+| `hqc_lab_insintric` sixteenth pass fastest non-CT + unrolled RM + unrolled RS fixed loops | 1 | 16 | PASS | 3,194,073 | 4,286,103 |
 
 | Variant | Corpus-estimated Pcycles/decode |
 | --- | ---: |
@@ -259,9 +270,12 @@ These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` means 160 total d
 | Eleventh pass fast non-CT + GF table LUT + RM LUT + fused RM | 60,834 |
 | Twelfth pass fast non-CT + GF table LUT + RM LUT + fused RM + HVX roots | 58,602 |
 | Thirteenth pass CT default + CT-HVX roots + arithmetic fused RM | 256,765 |
+| Fourteenth pass fastest non-CT + unrolled RM expand LUT | 51,018 |
+| Fifteenth pass fastest non-CT + unrolled RM expand LUT + unrolled RM Hadamard | 50,604 |
+| Sixteenth pass fastest non-CT + unrolled RM + unrolled RS fixed loops | 48,518 |
 
 
-On the corpus benchmark, the seventh-pass default CT path is about 58.4% faster than scalar and about 17.1% faster than the sixth pass. The thirteenth-pass default CT path is about 73.1% faster than scalar, about 35.2% faster than the seventh-pass CT path, and about 46.3% faster than the sixth pass. The seventh-pass fast non-CT path is about 72.1% faster than scalar and about 44.3% faster than the sixth pass, but it leaks decoded-error structure through branchy RS control flow. The twelfth-pass fastest measured combination remains 58,602 Pcycles/decode after the thirteenth-pass changes. It combines branchy RS leakage with data-dependent GF/RM table lookups, HVX root evaluation, and the fused RM benchmark path, so it remains benchmark-only.
+On the corpus benchmark, the seventh-pass default CT path is about 58.4% faster than scalar and about 17.1% faster than the sixth pass. The thirteenth-pass default CT path is about 73.1% faster than scalar, about 35.2% faster than the seventh-pass CT path, and about 46.3% faster than the sixth pass. The seventh-pass fast non-CT path is about 72.1% faster than scalar and about 44.3% faster than the sixth pass, but it leaks decoded-error structure through branchy RS control flow. The sixteenth-pass fastest measured combination is 48,518 Pcycles/decode after unrolling the HQC-128 RM expand LUT lookups, the fixed seven-pass RM Hadamard loop, and selected fixed-bound RS loops. It combines branchy RS leakage with data-dependent GF/RM table lookups, HVX root evaluation, and the fused RM benchmark path, so it remains benchmark-only.
 
 Default intrinsic substage snapshots:
 
@@ -365,6 +379,15 @@ These runs used `HQC_RS_FAST_NON_CT=1`, `HQC_GF_LUT_MUL=1`, `HQC_RM_EXPAND_LUT=1
 8. Done: promote CT-safe versions of the strongest measured default-path ideas.
    The thirteenth pass makes HVX Chien roots default only after removing the degree-dependent loop and coefficient-dependent branch from the default path. It also keeps GF arithmetic fixed-flow while inlining it into RS, uses the derivative denominator for error values with fixed `PARAM_DELTA` loops, and removes the default secret-indexed RM peak-value load. The fastest side-channel-relaxed path is still available and unchanged in measured Pcycles/decode.
 
+9. Done: unroll the fastest HQC-128 RM expand LUT loop.
+   The fourteenth pass keeps the same 3-copy nibble table mapping but removes the fixed four-word and eight-nibble loops in `expand_rm_copies_fast`. A trial vector peak-sign rewrite was rejected because it passed correctness but regressed full decode from the post-audit 57,507 Pcycles/decode baseline to about 58,473 Pcycles/decode.
+
+10. Done: unroll the fixed seven-pass RM Hadamard loop.
+    The fifteenth pass keeps the same HVX deal/deinterleave butterfly operations but expands the fixed loop body. A trial hoist of RM expand table initialization was rejected because it passed correctness but regressed full decode from 51,018 to about 51,306 Pcycles/decode.
+
+11. Done: unroll selected fastest-path RS fixed loops.
+    The sixteenth pass keeps the same branchy fastest non-CT RS algebra but asks the compiler to unroll fixed-bound syndrome, Berlekamp-Massey outer, error-position scan, and correction loops. A trial unroll of the `z` zeroing loop was rejected because it produced no full-decode improvement.
+
 ## Confidence notes
 
 The safe second-pass step was candidate 1: replacing the scalar even/odd gather with HVX deal/deinterleave. It was narrower than rewriting `expand_and_sum`, kept the same data representation, and directly fixed a measured weakness in the first intrinsic pass.
@@ -390,3 +413,9 @@ For the eleventh pass, confidence is scoped to the side-channel-relaxed RS fast 
 For the twelfth pass, confidence is scoped to the side-channel-relaxed Hexagon HVX roots experiment. The loopholes checked were support-point ordering, invalid lanes 46..63, table initialization overhead, GF table versus HVX arithmetic tradeoff, accidental default-path changes, and full-decode regression. The fixes/checks were: precompute powers for exactly `gf_exp[PARAM_GF_MUL_ORDER - i]`, ignore lanes beyond `PARAM_N1`, gate the path behind `HQC_RS_ROOTS_HVX=1`, keep scalar Chien as the default, run host fast decode, run default Hexagon 1-iter decode, rerun RS roots substage 1-iter and 10-iter with the flag, and rerun Hexagon full-decode 1-iter and 10-iter fastest benchmarks with `HQC_RS_ROOTS_HVX=1`.
 
 For the thirteenth pass, confidence is scoped to software constant-time behavior, correctness on the 16-fixture corpus, and Hexagon simulator Pcycles. It is not a formal physical side-channel proof. The loopholes checked were accidental data-dependent GF/RM tables in the default path, degree-dependent HVX roots, coefficient-dependent HVX roots branches, secret-indexed RM peak-value loads, implementation-defined signed-shift masks, fastest-path regression, and accidental promotion of branchy RS code. The fixes/checks were: keep `HQC_GF_LUT_MUL=0` in the default scripts, evaluate all `PARAM_DELTA + 1` coefficients in default `compute_roots_hvx`, keep the branchy degree-bound roots only under `HQC_RS_FAST_NON_CT=1`, recover RM peak sign with vector compare/mux/reduction in the default path, replace several default masks with unsigned helpers, keep the fused RM indexed load only under `HQC_RS_FAST_NON_CT=1`, run host decode, run default Hexagon 1-iter and 10-iter full-decode benchmarks, rerun RS ELP/roots/error-values substage 1-iter and 10-iter benchmarks, and rerun the fastest non-CT 1-iter and 10-iter benchmarks to confirm it remains 58,602 Pcycles/decode.
+
+For the fourteenth pass, confidence is scoped to the benchmark-only fastest non-CT path. The loopholes checked were substage-only wins that do not improve full decode, accidental HQC-192/256 breakage from an HQC-128-specific unroll, and misleading wins from rejected RM peak changes. The accepted RM expand unroll passed HQC-128 1-iter and 10-iter full decode, improved the corpus estimate to 51,018 Pcycles/decode, passed the affected RM expand substage, passed HQC-192/256 1-iter decode checks, and left the data-dependent lookup caveat unchanged.
+
+For the fifteenth pass, confidence is scoped to the same benchmark-only fastest non-CT path. The loopholes checked were code-size/scheduling regression from unrolling the Hadamard hardware loop and accidental breakage for HQC-192/256 multiplicity-5 decode. The accepted Hadamard unroll passed HQC-128 1-iter and 10-iter full decode, improved the corpus estimate to 50,604 Pcycles/decode, passed the affected RM Hadamard substage, and passed HQC-192/256 1-iter decode checks.
+
+For the sixteenth pass, confidence is scoped to the same benchmark-only fastest non-CT path and Hexagon simulator Pcycles. The loopholes checked were code-size regressions from pragma unrolling, substage-only wins, and parameter-set breakage. The accepted RS loop unrolls passed HQC-128 1-iter and 10-iter full decode, improved the corpus estimate to 48,518 Pcycles/decode, passed the affected RS syndrome/ELP/error-values/correct substages, and passed HQC-192/256 1-iter decode checks. The `rs_z` unroll trial was rejected because it produced no measurable full-decode gain.

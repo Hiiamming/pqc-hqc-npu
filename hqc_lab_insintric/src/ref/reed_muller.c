@@ -72,11 +72,16 @@ static void init_rm_expand3_nibble_table(void) {
 #endif
 
 static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[]);
+static inline void rm_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1);
 static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v);
 static inline HVX_Vector hvx_reduce_min_h(HVX_Vector v);
 static inline int32_t hvx_lane0_i16(HVX_Vector v);
 static inline int32_t rm_peak_from_hvx_rows(HVX_Vector row0, HVX_Vector row1);
 static inline int32_t rm_decode_one_hvx_fast(rm_codeword_t src[]);
+
+static const int16_t rm_half_hadamard_fix[64] __attribute__((aligned(128))) = {
+    64 * MULTIPLICITY,
+};
 
 // clang-format off
 /**
@@ -112,19 +117,36 @@ static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[
         init_rm_expand3_nibble_table();
     }
 
-    for (int32_t part = 0; part < 4; part++) {
-        uint32_t w0 = src[0].u32[part];
-        uint32_t w1 = src[1].u32[part];
-        uint32_t w2 = src[2].u32[part];
+#define RM_EXPAND3_PART(part)                                                                      \
+        do {                                                                                       \
+            uint32_t w0 = src[0].u32[(part)];                                                      \
+            uint32_t w1 = src[1].u32[(part)];                                                      \
+            uint32_t w2 = src[2].u32[(part)];                                                      \
+            RM_EXPAND3_LOOKUP(part, 0);                                                            \
+            RM_EXPAND3_LOOKUP(part, 1);                                                            \
+            RM_EXPAND3_LOOKUP(part, 2);                                                            \
+            RM_EXPAND3_LOOKUP(part, 3);                                                            \
+            RM_EXPAND3_LOOKUP(part, 4);                                                            \
+            RM_EXPAND3_LOOKUP(part, 5);                                                            \
+            RM_EXPAND3_LOOKUP(part, 6);                                                            \
+            RM_EXPAND3_LOOKUP(part, 7);                                                            \
+        } while (0)
 
-        for (int32_t nibble = 0; nibble < 8; nibble++) {
-            uint32_t shift = (uint32_t)(4 * nibble);
-            uint32_t index = ((w0 >> shift) & 0xfu) |
-                             (((w1 >> shift) & 0xfu) << 4) |
-                             (((w2 >> shift) & 0xfu) << 8);
-            out[part * 8 + nibble] = rm_expand3_nibble_table[index];
-        }
-    }
+#define RM_EXPAND3_LOOKUP(part, nibble)                                                           \
+        do {                                                                                       \
+            uint32_t shift = (uint32_t)(4 * (nibble));                                             \
+            uint32_t index = ((w0 >> shift) & 0xfu) | (((w1 >> shift) & 0xfu) << 4) |              \
+                             (((w2 >> shift) & 0xfu) << 8);                                        \
+            out[(part) * 8 + (nibble)] = rm_expand3_nibble_table[index];                           \
+        } while (0)
+
+    RM_EXPAND3_PART(0);
+    RM_EXPAND3_PART(1);
+    RM_EXPAND3_PART(2);
+    RM_EXPAND3_PART(3);
+
+#undef RM_EXPAND3_PART
+#undef RM_EXPAND3_LOOKUP
 #else
     for (int32_t part = 0; part < 4; part++) {
         uint32_t words[MULTIPLICITY];
@@ -142,6 +164,33 @@ static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[
         }
     }
 #endif
+}
+
+static inline void rm_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1) {
+    HVX_Vector lo = *row0;
+    HVX_Vector hi = *row1;
+
+#define RM_HADAMARD_PASS()                                      \
+    do {                                                        \
+        HVX_VectorPair deal = Q6_W_vdeal_VVR(hi, lo, 2);        \
+        HVX_Vector ve = Q6_Vh_vdeal_Vh(Q6_V_lo_W(deal));        \
+        HVX_Vector vo = Q6_Vh_vdeal_Vh(Q6_V_hi_W(deal));        \
+        lo = Q6_Vh_vadd_VhVh(ve, vo);                           \
+        hi = Q6_Vh_vsub_VhVh(ve, vo);                           \
+    } while (0)
+
+    RM_HADAMARD_PASS();
+    RM_HADAMARD_PASS();
+    RM_HADAMARD_PASS();
+    RM_HADAMARD_PASS();
+    RM_HADAMARD_PASS();
+    RM_HADAMARD_PASS();
+    RM_HADAMARD_PASS();
+
+#undef RM_HADAMARD_PASS
+
+    *row0 = lo;
+    *row1 = hi;
 }
 
 static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v) {
@@ -234,31 +283,19 @@ void encode(rm_codeword_t *word, int32_t message) {
 /**
  * @brief HVX RM(1,7) Hadamard transform.
  *
- * Each pass loads two 64-lane halfword vectors, uses HVX deal/deinterleave
- * instructions to form even and odd lanes, then computes vector add/sub
- * butterflies. This removes the scalar even/odd gather used by the reference
- * implementation.
+ * The transform loads two 64-lane halfword vectors once, keeps them in HVX
+ * registers across the seven deal/deinterleave butterfly passes, then stores
+ * the final rows. This removes both the scalar even/odd gather and the old
+ * per-pass stack ping-pong.
  */
 void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst) {
-    int16_t *p1 = *src;
-    int16_t *p2 = *dst;
+    HVX_Vector row0 = *(const HVX_Vector *)&(*src)[0];
+    HVX_Vector row1 = *(const HVX_Vector *)&(*src)[64];
 
-    for (int32_t pass = 0; pass < 7; pass++) {
-        HVX_Vector lo = *(const HVX_Vector *)&p1[0];
-        HVX_Vector hi = *(const HVX_Vector *)&p1[64];
-        HVX_VectorPair deal = Q6_W_vdeal_VVR(hi, lo, 2);
-        HVX_Vector ve = Q6_Vh_vdeal_Vh(Q6_V_lo_W(deal));
-        HVX_Vector vo = Q6_Vh_vdeal_Vh(Q6_V_hi_W(deal));
-        HVX_Vector sum = Q6_Vh_vadd_VhVh(ve, vo);
-        HVX_Vector diff = Q6_Vh_vsub_VhVh(ve, vo);
+    rm_hadamard_rows_hvx(&row0, &row1);
 
-        *(HVX_Vector *)&p2[0] = sum;
-        *(HVX_Vector *)&p2[64] = diff;
-
-        int16_t *p3 = p1;
-        p1 = p2;
-        p2 = p3;
-    }
+    *(HVX_Vector *)&(*dst)[0] = row0;
+    *(HVX_Vector *)&(*dst)[64] = row1;
 }
 
 /**
@@ -295,34 +332,14 @@ int32_t find_peaks_hvx(rm_expanded_cdw *transform) {
  */
 static inline int32_t __attribute__((always_inline)) rm_decode_one_hvx_fast(rm_codeword_t src[]) {
     rm_expanded_cdw expanded __attribute__((aligned(128)));
-    rm_expanded_cdw transform __attribute__((aligned(128)));
 
     expand_rm_copies_fast((uint64_t *)expanded, src);
 
-    int16_t *p1 = expanded;
-    int16_t *p2 = transform;
+    HVX_Vector row0 = *(const HVX_Vector *)&expanded[0];
+    HVX_Vector row1 = *(const HVX_Vector *)&expanded[64];
+    rm_hadamard_rows_hvx(&row0, &row1);
+    row0 = Q6_Vh_vsub_VhVh(row0, *(const HVX_Vector *)rm_half_hadamard_fix);
 
-    for (int32_t pass = 0; pass < 7; pass++) {
-        HVX_Vector lo = *(const HVX_Vector *)&p1[0];
-        HVX_Vector hi = *(const HVX_Vector *)&p1[64];
-        HVX_VectorPair deal = Q6_W_vdeal_VVR(hi, lo, 2);
-        HVX_Vector ve = Q6_Vh_vdeal_Vh(Q6_V_lo_W(deal));
-        HVX_Vector vo = Q6_Vh_vdeal_Vh(Q6_V_hi_W(deal));
-        HVX_Vector sum = Q6_Vh_vadd_VhVh(ve, vo);
-        HVX_Vector diff = Q6_Vh_vsub_VhVh(ve, vo);
-
-        *(HVX_Vector *)&p2[0] = sum;
-        *(HVX_Vector *)&p2[64] = diff;
-
-        int16_t *p3 = p1;
-        p1 = p2;
-        p2 = p3;
-    }
-
-    p1[0] -= 64 * MULTIPLICITY;
-
-    HVX_Vector row0 = *(const HVX_Vector *)&p1[0];
-    HVX_Vector row1 = *(const HVX_Vector *)&p1[64];
     return rm_peak_from_hvx_rows(row0, row1);
 }
 

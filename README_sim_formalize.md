@@ -194,3 +194,27 @@ intrinsic_fastest_non_ct,rs_correct,438.6,439,0.6
 - Current `hqc_lab_insintric` scripts run the fastest path by default now; use `HQC128_BENCH_ITERS=10 ./hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh` instead of passing the old fastest env flags.
 - Scalar substage support is benchmark-only and was added to measure the same RM/RS stages as the intrinsic benchmark.
 - The intrinsic Reed-Muller code was refactored before these measurements. Post-refactor full-decode checks showed no meaningful performance loss: default CT measured 252,490 Pcycles/decode and fastest non-CT measured 58,605 Pcycles/decode.
+
+## Post-Audit Update
+
+Date: 2026-05-21.
+
+The `hqc_lab_insintric` Hexagon scripts now auto-detect both supported repository layouts: `tools/` directly under the project parent, and this workspace's `hqc/` checkout beside `../tools/`. This removes the need to set `HEXAGON_TUTORIAL_ROOT` manually in the current workspace.
+
+The fastest non-CT RM Hadamard path was changed to keep the two 128-byte HVX rows in vector registers across all seven transform passes instead of ping-ponging through stack memory between passes, then the fixed seven-pass Hadamard loop was unrolled. The subsequent fastest non-CT RM expand path keeps the same HQC-128 3-copy nibble table mapping but unrolls the fixed four-word and eight-nibble lookup loops to reduce overhead. Selected fastest-path RS fixed loops were also unrolled. Correctness remained `PASS` on the 16-fixture HQC-128/192/256 decode checks.
+
+Updated HQC-128 fastest non-CT simulator measurements:
+
+| Run | 1-iter Pcycles | 10-iter Pcycles | Derived Pcycles/decode |
+| --- | ---: | ---: | ---: |
+| Full decode after register-resident RM Hadamard | 4,409,700 | 12,690,720 | 57,507 |
+| `rm_hadamard` substage | 5,857,842 | 8,481,054 | 396.0 Pcycles/block, 18,216 Pcycles/decode |
+| Full decode after unrolled RM expand LUT | 4,307,034 | 11,653,638 | 51,018 |
+| `rm_expand` substage after unroll | 5,564,823 | 7,553,706 | 300.3 Pcycles/block, 13,812 Pcycles/decode |
+| Full decode after unrolled RM Hadamard loop | 4,300,614 | 11,587,602 | 50,604 |
+| `rm_hadamard` substage after loop unroll | 5,621,385 | 8,205,057 | 390.0 Pcycles/block, 17,942 Pcycles/decode |
+| Full decode after unrolled RS fixed loops | 4,286,103 | 11,272,635 | 48,518 |
+| `rs_syndrome` substage after unroll | 5,461,326 | 6,664,872 | 8,358 Pcycles/decode |
+| `rs_elp` substage after unroll | 5,402,805 | 6,349,473 | 6,574 Pcycles/decode |
+| `rs_error_values` substage after scan unroll | 5,392,341 | 6,243,141 | 5,908 Pcycles/decode |
+| `rs_correct` substage after unroll | 5,304,831 | 5,366,268 | 427 Pcycles/decode |

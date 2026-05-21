@@ -3,7 +3,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-TUTORIAL_ROOT="${HEXAGON_TUTORIAL_ROOT:-$(cd "$PROJECT_DIR/.." && pwd)}"
+PROJECT_PARENT="$(cd "$PROJECT_DIR/.." && pwd)"
+if [ -n "${HEXAGON_TUTORIAL_ROOT:-}" ]; then
+    TUTORIAL_ROOT="$HEXAGON_TUTORIAL_ROOT"
+elif [ -d "$PROJECT_PARENT/tools/hexagon-sdk" ]; then
+    TUTORIAL_ROOT="$PROJECT_PARENT"
+else
+    TUTORIAL_ROOT="$(cd "$PROJECT_PARENT/.." && pwd)"
+fi
 HEXAGON_SDK_ROOT="${HEXAGON_SDK_ROOT:-$TUTORIAL_ROOT/tools/hexagon-sdk}"
 
 TOOLS_BIN="$HEXAGON_SDK_ROOT/tools/HEXAGON_Tools/19.0.04/Tools/bin"

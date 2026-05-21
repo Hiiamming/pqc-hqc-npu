@@ -216,6 +216,7 @@ static void compute_syndromes_hvx(uint16_t *syndromes, uint8_t *cdw) {
 
     init_alpha_ji_pow();
 
+#pragma unroll
     for (size_t j = 1; j < PARAM_N1; ++j) {
         HVX_Vector coeffs = *(const HVX_Vector *)&alpha_ji_pow[j - 1][0];
         HVX_Vector prod = gf_mul_scalar_by_vec_hvx(cdw[j], coeffs);
@@ -248,6 +249,7 @@ static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
     sigma[0] = 1;
     b[0] = 1;
 
+#pragma unroll
     for (uint16_t mu = 0; mu < (2 * PARAM_DELTA); ++mu) {
         uint16_t d = syndromes[mu];
 
@@ -417,6 +419,7 @@ static void compute_error_values(uint16_t *error_values, const uint16_t *z, cons
     size_t pos_j[PARAM_DELTA] = {0};
     size_t delta = 0;
 
+#pragma unroll
     for (size_t i = 0; i < PARAM_N1; ++i) {
         if (error[i] && (delta < PARAM_DELTA)) {
             beta_j[delta] = gf_exp[i];
@@ -454,6 +457,7 @@ static void compute_error_values(uint16_t *error_values, const uint16_t *z, cons
  * @param[in] error_values Array of PARAM_DELTA elements storing the error values
  */
 static void correct_errors(uint8_t *cdw, const uint16_t *error_values) {
+#pragma unroll
     for (size_t i = 0; i < PARAM_N1; ++i) {
         cdw[i] ^= error_values[i];
     }
