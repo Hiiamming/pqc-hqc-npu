@@ -1,3 +1,0 @@
-HQC-192 CPU scalar Android artifact
-source=scalar_on_board_cpu/build/hqc192_decode_bench_arm64_android
-iters=10000

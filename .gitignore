@@ -43,16 +43,29 @@ Thumbs.db
 tmp_*.sh
 tmp_*.log
 
+# Windows alternate-data-stream metadata copied from NTFS.
+*:Zone.Identifier
 
-# Né mấy cái folder chứa kết quả chạy profile NPU
-qprof_qrd8650_whole_runs/
-qprof_hqc_whole_runs/
-qprof_hqc_ct_repeat_runs/
-qprof_hqc_fixed_runs/
-qprof_hqc_ct_runs/
-qprof_hdk8550_planA_runs/
-qprof_hqc_fixed_runs2/
+# Device/qprof measurement output. Keep curated summaries in README_result_*.md,
+# not multi-GB raw profiler captures.
+results/qprof/
+qprof_*_runs/
+qprof_*_runs*/
+qprof_hqc_*_runs/
 
-# Hoặc cẩn thận hơn thì chặn luôn tất cả file log và json nặng trong cụm này
+# Generated deployment artifact snapshots.
+hqc_fastrpc_intrinsic_android/
+**/android_artifacts/
+**/*_artifacts/
+
+# Local credentials and scratch notes.
+qdc_id_*.pem
+secrets/
+lenh.txt
+
+# Generated reports / PDFs unless intentionally promoted.
+*.aux
 *.log
+*.out
+*.pdf
 *-metrics.json

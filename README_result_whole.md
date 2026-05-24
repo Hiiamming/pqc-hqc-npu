@@ -63,12 +63,12 @@ Energy numbers in the main table use direct device power-supply samples with qpr
 
 | HQC | Backend | Result | Total decodes | elapsed ms | us/decode | decodes/s | idle W | run W | delta W | delta J | uJ/decode | decodes/s/W | run samples | Raw dir |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| HQC-128 | CPU scalar | PASS | 160000 | 13140.000 | 80.622 | 12403.562 | 0.628890339 | 3.282510119 | 2.653619780 | 34.868563909 | 217.929 | 4674.205 | 76 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_092837_hqc128_cpu_scalar_direct` |
-| HQC-128 | NPU fastest non-CT | PASS | 160000 | 6820.000 | 40.570 | 24648.755 | 0.623354013 | 1.021029522 | 0.397675509 | 2.712146971 | 16.951 | 61982.079 | 34 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_092931_hqc128_npu_fastest_nonct_direct` |
-| HQC-192 | CPU scalar | PASS | 160000 | 16630.000 | 102.844 | 9723.465 | 0.670835022 | 3.388325388 | 2.717490366 | 45.191864787 | 282.449 | 3578.105 | 95 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093008_hqc192_cpu_scalar_direct` |
-| HQC-192 | NPU fastest non-CT | PASS | 160000 | 8280.000 | 50.734 | 19710.648 | 0.663216640 | 1.073748703 | 0.410532063 | 3.399205482 | 21.245 | 48012.445 | 41 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093109_hqc192_npu_fastest_nonct_direct` |
-| HQC-256 | CPU scalar | PASS | 160000 | 36450.000 | 227.041 | 4404.491 | 0.656270308 | 3.532541950 | 2.876271642 | 104.840101351 | 655.251 | 1531.320 | 210 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093147_hqc256_cpu_scalar_direct` |
-| HQC-256 | NPU fastest non-CT | PASS | 160000 | 12490.000 | 77.094 | 12971.178 | 0.648378381 | 1.103923252 | 0.455544871 | 5.689755439 | 35.561 | 28473.985 | 62 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093333_hqc256_npu_fastest_nonct_direct` |
+| HQC-128 | CPU scalar | PASS | 160000 | 13140.000 | 80.622 | 12403.562 | 0.628890339 | 3.282510119 | 2.653619780 | 34.868563909 | 217.929 | 4674.205 | 76 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_092837_hqc128_cpu_scalar_direct` |
+| HQC-128 | NPU fastest non-CT | PASS | 160000 | 6820.000 | 40.570 | 24648.755 | 0.623354013 | 1.021029522 | 0.397675509 | 2.712146971 | 16.951 | 61982.079 | 34 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_092931_hqc128_npu_fastest_nonct_direct` |
+| HQC-192 | CPU scalar | PASS | 160000 | 16630.000 | 102.844 | 9723.465 | 0.670835022 | 3.388325388 | 2.717490366 | 45.191864787 | 282.449 | 3578.105 | 95 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093008_hqc192_cpu_scalar_direct` |
+| HQC-192 | NPU fastest non-CT | PASS | 160000 | 8280.000 | 50.734 | 19710.648 | 0.663216640 | 1.073748703 | 0.410532063 | 3.399205482 | 21.245 | 48012.445 | 41 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093109_hqc192_npu_fastest_nonct_direct` |
+| HQC-256 | CPU scalar | PASS | 160000 | 36450.000 | 227.041 | 4404.491 | 0.656270308 | 3.532541950 | 2.876271642 | 104.840101351 | 655.251 | 1531.320 | 210 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093147_hqc256_cpu_scalar_direct` |
+| HQC-256 | NPU fastest non-CT | PASS | 160000 | 12490.000 | 77.094 | 12971.178 | 0.648378381 | 1.103923252 | 0.455544871 | 5.689755439 | 35.561 | 28473.985 | 62 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093333_hqc256_npu_fastest_nonct_direct` |
 
 ## qprof Diagnostic Context
 
@@ -76,12 +76,12 @@ These runs were captured with qprof enabled, so their qprof power numbers are di
 
 | HQC | Backend | profile rc | Result | Total decodes | elapsed ms | us/decode | CPU load avg % | NPU util avg % | QDSP clk MHz | HMX util avg % | MemNoc MHz | Thermal max C | Raw dir |
 | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| HQC-128 | CPU scalar | 0 | PASS | 160000 | 12856.760 | 80.355 | 16.193041 |  |  |  |  | 78.500000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_fixed_runs2/20260524_101413_hqc128_cpu_scalar_fixed2_cpu` |
-| HQC-128 | NPU fastest non-CT | 0 | PASS | 160000 | 8173.296 | 51.083 | 13.627097 | 98.536997 | 1163.711538 | 0.000000 | 499.517308 | 76.100000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_fixed_runs2/20260524_101531_hqc128_npu_fastest_nonct_fixed2_npu1` |
-| HQC-192 | CPU scalar | 0 | PASS | 160000 | 16500.590 | 103.129 | 18.027545 |  |  |  |  | 78.500000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_fixed_runs2/20260524_101705_hqc192_cpu_scalar_fixed2_cpu` |
-| HQC-192 | NPU fastest non-CT | 0 | PASS | 160000 | 10212.424 | 63.828 | 14.696966 | 98.867737 | 1163.307692 | 0.000000 | 499.269577 | 78.900000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_fixed_runs2/20260524_101823_hqc192_npu_fastest_nonct_fixed2_npu1` |
-| HQC-256 | CPU scalar | 0 | PASS | 160000 | 36328.146 | 227.051 | 25.540614 |  |  |  |  | 83.200000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_fixed_runs2/20260524_101958_hqc256_cpu_scalar_fixed2_cpu` |
-| HQC-256 | NPU fastest non-CT | 139 | PASS | 160000 | 15540.877 | 97.130 | 23.297743 | 99.689609 | 1172.269837 | 0.000000 | 499.392281 | 75.700000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_fixed_runs2/20260524_102257_hqc256_npu_fastest_nonct_fixed2_rerun20_npu1` |
+| HQC-128 | CPU scalar | 0 | PASS | 160000 | 12856.760 | 80.355 | 16.193041 |  |  |  |  | 78.500000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_fixed_runs2/20260524_101413_hqc128_cpu_scalar_fixed2_cpu` |
+| HQC-128 | NPU fastest non-CT | 0 | PASS | 160000 | 8173.296 | 51.083 | 13.627097 | 98.536997 | 1163.711538 | 0.000000 | 499.517308 | 76.100000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_fixed_runs2/20260524_101531_hqc128_npu_fastest_nonct_fixed2_npu1` |
+| HQC-192 | CPU scalar | 0 | PASS | 160000 | 16500.590 | 103.129 | 18.027545 |  |  |  |  | 78.500000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_fixed_runs2/20260524_101705_hqc192_cpu_scalar_fixed2_cpu` |
+| HQC-192 | NPU fastest non-CT | 0 | PASS | 160000 | 10212.424 | 63.828 | 14.696966 | 98.867737 | 1163.307692 | 0.000000 | 499.269577 | 78.900000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_fixed_runs2/20260524_101823_hqc192_npu_fastest_nonct_fixed2_npu1` |
+| HQC-256 | CPU scalar | 0 | PASS | 160000 | 36328.146 | 227.051 | 25.540614 |  |  |  |  | 83.200000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_fixed_runs2/20260524_101958_hqc256_cpu_scalar_fixed2_cpu` |
+| HQC-256 | NPU fastest non-CT | 139 | PASS | 160000 | 15540.877 | 97.130 | 23.297743 | 99.689609 | 1172.269837 | 0.000000 | 499.392281 | 75.700000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_fixed_runs2/20260524_102257_hqc256_npu_fastest_nonct_fixed2_rerun20_npu1` |
 
 Note: HQC-256 NPU repeatedly produced complete qprof counters and a PASS workload result, then `qprof` exited with `profile_rc=139` after printing the final samples. A 10s rerun exits cleanly but misses NPU counters, so the 20s diagnostic row above keeps the useful DSP metrics and flags the qprof exit code.
 
@@ -106,7 +106,7 @@ uJ_per_decode=217.929
 throughput_per_W=4674.205
 run_samples=76
 idle_samples=101
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_092837_hqc128_cpu_scalar_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_092837_hqc128_cpu_scalar_direct
 
 run_id=20260524_092931_hqc128_npu_fastest_nonct_direct
 label=hqc128_npu_fastest_nonct
@@ -126,7 +126,7 @@ uJ_per_decode=16.951
 throughput_per_W=61982.079
 run_samples=34
 idle_samples=74
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_092931_hqc128_npu_fastest_nonct_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_092931_hqc128_npu_fastest_nonct_direct
 
 run_id=20260524_093008_hqc192_cpu_scalar_direct
 label=hqc192_cpu_scalar
@@ -146,7 +146,7 @@ uJ_per_decode=282.449
 throughput_per_W=3578.105
 run_samples=95
 idle_samples=116
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093008_hqc192_cpu_scalar_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093008_hqc192_cpu_scalar_direct
 
 run_id=20260524_093109_hqc192_npu_fastest_nonct_direct
 label=hqc192_npu_fastest_nonct
@@ -166,7 +166,7 @@ uJ_per_decode=21.245
 throughput_per_W=48012.445
 run_samples=41
 idle_samples=80
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093109_hqc192_npu_fastest_nonct_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093109_hqc192_npu_fastest_nonct_direct
 
 run_id=20260524_093147_hqc256_cpu_scalar_direct
 label=hqc256_cpu_scalar
@@ -186,7 +186,7 @@ uJ_per_decode=655.251
 throughput_per_W=1531.320
 run_samples=210
 idle_samples=200
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093147_hqc256_cpu_scalar_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093147_hqc256_cpu_scalar_direct
 
 run_id=20260524_093333_hqc256_npu_fastest_nonct_direct
 label=hqc256_npu_fastest_nonct
@@ -206,7 +206,7 @@ uJ_per_decode=35.561
 throughput_per_W=28473.985
 run_samples=62
 idle_samples=97
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_whole_runs/20260524_093333_hqc256_npu_fastest_nonct_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_runs/20260524_093333_hqc256_npu_fastest_nonct_direct
 ```
 
 ## CT NPU Direct Energy Results
@@ -215,9 +215,9 @@ These rows measure `hqc_lab_insintric_ct` on cDSP through the same FastRPC harne
 
 | HQC | Backend | Result | Total decodes | elapsed ms | us/decode | decodes/s | idle W | run W | delta W | delta J | uJ/decode | decodes/s/W | run samples | Raw dir |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| HQC-128 | NPU CT | PASS | 160000 | 12920.000 | 79.879 | 12383.901 | 0.655292679 | 0.978602874 | 0.323310195 | 4.177167719 | 26.107 | 38303.466 | 64 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_103724_hqc128_npu_ct_direct` |
-| HQC-192 | NPU CT | PASS | 160000 | 14810.000 | 90.689 | 10803.511 | 0.628157265 | 1.086242507 | 0.458085242 | 6.784242434 | 42.402 | 23584.063 | 72 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_103952_hqc192_npu_ct_direct` |
-| HQC-256 | NPU CT | PASS | 160000 | 27330.000 | 169.289 | 5854.372 | 0.665581005 | 1.088438309 | 0.422857304 | 11.556690118 | 72.229 | 13844.795 | 132 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_104249_hqc256_npu_ct_direct` |
+| HQC-128 | NPU CT | PASS | 160000 | 12920.000 | 79.879 | 12383.901 | 0.655292679 | 0.978602874 | 0.323310195 | 4.177167719 | 26.107 | 38303.466 | 64 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_103724_hqc128_npu_ct_direct` |
+| HQC-192 | NPU CT | PASS | 160000 | 14810.000 | 90.689 | 10803.511 | 0.628157265 | 1.086242507 | 0.458085242 | 6.784242434 | 42.402 | 23584.063 | 72 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_103952_hqc192_npu_ct_direct` |
+| HQC-256 | NPU CT | PASS | 160000 | 27330.000 | 169.289 | 5854.372 | 0.665581005 | 1.088438309 | 0.422857304 | 11.556690118 | 72.229 | 13844.795 | 132 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_104249_hqc256_npu_ct_direct` |
 
 ## CT NPU qprof Diagnostic Context
 
@@ -225,9 +225,9 @@ These qprof rows are diagnostic only; qprof perturbs power and clock state, so d
 
 | HQC | Backend | profile rc | Result | Total decodes | elapsed ms | us/decode | CPU load avg % | NPU util avg % | QDSP clk MHz | HMX util avg % | MemNoc MHz | Thermal max C | Raw dir |
 | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| HQC-128 | NPU CT | 0 | PASS | 160000 | 10148.910 | 63.431 | 8.654103 |  |  |  |  | 61.500000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_103854_hqc128_npu_ct_npu1` |
-| HQC-192 | NPU CT | 0 | PASS | 160000 | 18281.029 | 114.256 | 19.903738 | 99.586192 | 1168.178839 | 0.000000 | 498.318353 | 82.800000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_104126_hqc192_npu_ct_npu1` |
-| HQC-256 | NPU CT | 139 | PASS | 160000 | 34145.571 | 213.410 | 13.008400 | 98.163037 | 1180.509091 | 0.000000 | 512.654545 | 53.200000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_104448_hqc256_npu_ct_npu1` |
+| HQC-128 | NPU CT | 0 | PASS | 160000 | 10148.910 | 63.431 | 8.654103 |  |  |  |  | 61.500000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_103854_hqc128_npu_ct_npu1` |
+| HQC-192 | NPU CT | 0 | PASS | 160000 | 18281.029 | 114.256 | 19.903738 | 99.586192 | 1168.178839 | 0.000000 | 498.318353 | 82.800000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_104126_hqc192_npu_ct_npu1` |
+| HQC-256 | NPU CT | 139 | PASS | 160000 | 34145.571 | 213.410 | 13.008400 | 98.163037 | 1180.509091 | 0.000000 | 512.654545 | 53.200000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_104448_hqc256_npu_ct_npu1` |
 
 ## CT NPU Repeat Validation
 
@@ -235,9 +235,9 @@ Direct energy was rerun 3 times per CT NPU level without rebuilding. The median 
 
 | HQC | Backend | Runs | median elapsed ms | median us/decode | median uJ/decode | uJ/decode samples | Raw root |
 | --- | --- | ---: | ---: | ---: | ---: | --- | --- |
-| HQC-128 | NPU CT | 3 | 13020.000 | 79.879 | 17.089 | 18.936, 17.089, 16.362 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_repeat_runs` |
-| HQC-192 | NPU CT | 3 | 18490.000 | 114.257 | 26.603 | 26.603, 29.488, 22.408 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_repeat_runs` |
-| HQC-256 | NPU CT | 3 | 34340.000 | 213.401 | 57.120 | 63.518, 57.120, 52.186 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_repeat_runs` |
+| HQC-128 | NPU CT | 3 | 13020.000 | 79.879 | 17.089 | 18.936, 17.089, 16.362 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_repeat_runs` |
+| HQC-192 | NPU CT | 3 | 18490.000 | 114.257 | 26.603 | 26.603, 29.488, 22.408 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_repeat_runs` |
+| HQC-256 | NPU CT | 3 | 34340.000 | 213.401 | 57.120 | 63.518, 57.120, 52.186 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_repeat_runs` |
 
 qprof rerun notes:
 
@@ -247,9 +247,9 @@ qprof rerun notes:
 
 | HQC | qprof mode | profile rc | Result | Total decodes | us/decode | CPU load avg % | NPU util avg % | QDSP clk MHz | MemNoc MHz | Thermal max C | Raw dir |
 | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| HQC-128 | npu0 | 0 | PASS | 480000 | 79.878 | 25.917815 | 99.936059 | 1171.335018 | 497.519418 | 86.000000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_repeat_runs/20260524_110050_hqc128_npu_ct_qprof_long_npu0_npu0` |
-| HQC-192 | npu1 | 0 | PASS | 160000 | 114.256 | 19.903738 | 99.586192 | 1168.178839 | 498.318353 | 82.800000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_104126_hqc192_npu_ct_npu1` |
-| HQC-256 | npu1 | 139 | PASS | 160000 | 213.410 | 13.008400 | 98.163037 | 1180.509091 | 512.654545 | 53.200000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_104448_hqc256_npu_ct_npu1` |
+| HQC-128 | npu0 | 0 | PASS | 480000 | 79.878 | 25.917815 | 99.936059 | 1171.335018 | 497.519418 | 86.000000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_repeat_runs/20260524_110050_hqc128_npu_ct_qprof_long_npu0_npu0` |
+| HQC-192 | npu1 | 0 | PASS | 160000 | 114.256 | 19.903738 | 99.586192 | 1168.178839 | 498.318353 | 82.800000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_104126_hqc192_npu_ct_npu1` |
+| HQC-256 | npu1 | 139 | PASS | 160000 | 213.410 | 13.008400 | 98.163037 | 1180.509091 | 512.654545 | 53.200000 | `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_104448_hqc256_npu_ct_npu1` |
 
 ### CT Raw Summary Files
 
@@ -271,7 +271,7 @@ uJ_per_decode=26.107
 throughput_per_W=38303.466
 run_samples=64
 idle_samples=99
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_103724_hqc128_npu_ct_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_103724_hqc128_npu_ct_direct
 
 run_id=20260524_103815_hqc128_idle_before_npu_ct_idle
 label=hqc128_idle_before_npu_ct
@@ -352,7 +352,7 @@ uJ_per_decode=42.402
 throughput_per_W=23584.063
 run_samples=72
 idle_samples=107
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_103952_hqc192_npu_ct_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_103952_hqc192_npu_ct_direct
 
 run_id=20260524_104045_hqc192_idle_before_npu_ct_idle
 label=hqc192_idle_before_npu_ct
@@ -433,7 +433,7 @@ uJ_per_decode=72.229
 throughput_per_W=13844.795
 run_samples=132
 idle_samples=160
-out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/qprof_hqc_ct_runs/20260524_104249_hqc256_npu_ct_direct
+out_dir=/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_ct_runs/20260524_104249_hqc256_npu_ct_direct
 
 run_id=20260524_104406_hqc256_idle_before_npu_ct_idle
 label=hqc256_idle_before_npu_ct

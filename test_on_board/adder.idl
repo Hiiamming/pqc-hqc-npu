@@ -1,5 +1,0 @@
-#include "remote.idl"
-interface adder {
-    long sum(in long a, in long b, rout long result);
-};
-

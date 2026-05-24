@@ -1,7 +1,0 @@
-run_id=20260524_094123_hqc192_cpu_scalar_direct
-label=hqc192_cpu_scalar
-mode=direct
-sample_interval_s=0.1
-idle_seconds=1
-idle_position=both
-workload_cmd=cd /data/local/tmp/QDC_files/hqc_whole/hqc192_cpu_scalar && chmod +x hqc192_decode_bench_arm64_android && ./hqc192_decode_bench_arm64_android

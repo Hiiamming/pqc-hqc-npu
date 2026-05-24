@@ -63,7 +63,7 @@ If there is no device, check the QDC SSH tunnel that forwards ADB. On this
 session it looked like:
 
 ```text
-ssh -i qdc_id_2026-5-13_317.pem -L 5037:sa606759.sa.svc.cluster.local:5037 -N sshtunnel@ssh.qdc.qualcomm.com
+ssh -i secrets/qdc_id_2026-5-13_317.pem -L 5037:sa606759.sa.svc.cluster.local:5037 -N sshtunnel@ssh.qdc.qualcomm.com
 ```
 
 The `sa606759...` host can change between QDC sessions. Read the active SSH
@@ -298,7 +298,7 @@ Run from the repo root:
 
 ```sh
 cd /home/hiiamming/Code/test/hexagon-tutorial/hqc
-./measure_hqc_whole_android.sh
+scripts/measure_android_decode.sh
 ```
 
 The script builds each level, pushes binaries to:
@@ -328,10 +328,10 @@ README_result_whole.md
 Useful overrides:
 
 ```sh
-PROFILE_TIME=60 ./measure_hqc_whole_android.sh
-CPU_ITERS_128=20000 CPU_ITERS_192=2000 CPU_ITERS_256=1000 ./measure_hqc_whole_android.sh
-NPU_ITERS_128=20000 NPU_ITERS_192=2000 NPU_ITERS_256=1000 ./measure_hqc_whole_android.sh
-LEVELS="128" ./measure_hqc_whole_android.sh
+PROFILE_TIME=60 scripts/measure_android_decode.sh
+CPU_ITERS_128=20000 CPU_ITERS_192=2000 CPU_ITERS_256=1000 scripts/measure_android_decode.sh
+NPU_ITERS_128=20000 NPU_ITERS_192=2000 NPU_ITERS_256=1000 scripts/measure_android_decode.sh
+LEVELS="128" scripts/measure_android_decode.sh
 ```
 
 The NPU build is forced to the fastest non-CT configuration:
@@ -347,7 +347,7 @@ HQC_RS_ROOTS_HVX=1
 For a single ad-hoc measurement around an already deployed workload, use:
 
 ```sh
-PROFILE_TIME=30 IDLE_POWER_W=0.70 ./measure_hqc_qprof_android.sh npu1 hqc128_npu \
+PROFILE_TIME=30 IDLE_POWER_W=0.70 scripts/measure_qprof.sh npu1 hqc128_npu \
   'cd /data/local/tmp/QDC_files/hqc_whole/hqc128_npu_fastest_nonct && ./hqc_host 10000'
 ```
 
