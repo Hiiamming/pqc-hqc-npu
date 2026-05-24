@@ -1,0 +1,3 @@
+HQC-256 CPU scalar Android artifact
+source=scalar_on_board_cpu/build/hqc256_decode_bench_arm64_android
+iters=10000

@@ -52,7 +52,7 @@ static const int16_t rm_index_hi[64] __attribute__((aligned(128))) = {
     96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111,
     112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127};
 
-#if MULTIPLICITY == 3
+#if (MULTIPLICITY == 3) || (MULTIPLICITY == 5)
 static uint64_t rm_expand3_nibble_table[4096] __attribute__((aligned(128)));
 static int rm_expand3_nibble_table_ready = 0;
 
@@ -68,6 +68,22 @@ static void init_rm_expand3_nibble_table(void) {
     }
 
     rm_expand3_nibble_table_ready = 1;
+}
+#endif
+
+#if MULTIPLICITY == 5
+static uint64_t rm_expand2_nibble_table[256] __attribute__((aligned(128)));
+static int rm_expand2_nibble_table_ready = 0;
+
+static void init_rm_expand2_nibble_table(void) {
+    for (uint32_t n0 = 0; n0 < 16; ++n0) {
+        for (uint32_t n1 = 0; n1 < 16; ++n1) {
+            uint32_t index = n0 | (n1 << 4);
+            rm_expand2_nibble_table[index] = expand_nibble_to_u16(n0) + expand_nibble_to_u16(n1);
+        }
+    }
+
+    rm_expand2_nibble_table_ready = 1;
 }
 #endif
 
@@ -147,6 +163,48 @@ static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[
 
 #undef RM_EXPAND3_PART
 #undef RM_EXPAND3_LOOKUP
+#elif MULTIPLICITY == 5
+    if (!rm_expand3_nibble_table_ready) {
+        init_rm_expand3_nibble_table();
+    }
+    if (!rm_expand2_nibble_table_ready) {
+        init_rm_expand2_nibble_table();
+    }
+
+#define RM_EXPAND5_PART(part)                                                                      \
+        do {                                                                                       \
+            uint32_t w0 = src[0].u32[(part)];                                                      \
+            uint32_t w1 = src[1].u32[(part)];                                                      \
+            uint32_t w2 = src[2].u32[(part)];                                                      \
+            uint32_t w3 = src[3].u32[(part)];                                                      \
+            uint32_t w4 = src[4].u32[(part)];                                                      \
+            RM_EXPAND5_LOOKUP(part, 0);                                                            \
+            RM_EXPAND5_LOOKUP(part, 1);                                                            \
+            RM_EXPAND5_LOOKUP(part, 2);                                                            \
+            RM_EXPAND5_LOOKUP(part, 3);                                                            \
+            RM_EXPAND5_LOOKUP(part, 4);                                                            \
+            RM_EXPAND5_LOOKUP(part, 5);                                                            \
+            RM_EXPAND5_LOOKUP(part, 6);                                                            \
+            RM_EXPAND5_LOOKUP(part, 7);                                                            \
+        } while (0)
+
+#define RM_EXPAND5_LOOKUP(part, nibble)                                                           \
+        do {                                                                                       \
+            uint32_t shift = (uint32_t)(4 * (nibble));                                             \
+            uint32_t index3 = ((w0 >> shift) & 0xfu) | (((w1 >> shift) & 0xfu) << 4) |             \
+                              (((w2 >> shift) & 0xfu) << 8);                                       \
+            uint32_t index2 = ((w3 >> shift) & 0xfu) | (((w4 >> shift) & 0xfu) << 4);              \
+            out[(part) * 8 + (nibble)] = rm_expand3_nibble_table[index3] +                         \
+                                         rm_expand2_nibble_table[index2];                          \
+        } while (0)
+
+    RM_EXPAND5_PART(0);
+    RM_EXPAND5_PART(1);
+    RM_EXPAND5_PART(2);
+    RM_EXPAND5_PART(3);
+
+#undef RM_EXPAND5_PART
+#undef RM_EXPAND5_LOOKUP
 #else
     for (int32_t part = 0; part < 4; part++) {
         uint32_t words[MULTIPLICITY];

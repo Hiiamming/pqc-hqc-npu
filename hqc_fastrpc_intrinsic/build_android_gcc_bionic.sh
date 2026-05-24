@@ -6,16 +6,23 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 HEXAGON_SDK_ROOT="${HEXAGON_SDK_ROOT:-$ROOT_DIR/../tools/hexagon-sdk}"
 
 AARCH64_GCC="${AARCH64_GCC:-aarch64-linux-gnu-gcc}"
+ADB="${ADB:-adb}"
 ANDROID_LIB_DIR="${ANDROID_LIB_DIR:-$SCRIPT_DIR/build/android-bionic-lib64}"
 BUILD_DIR="$SCRIPT_DIR/build"
 GEN_DIR="$SCRIPT_DIR/generated"
 
-for tool in "$AARCH64_GCC" adb readelf; do
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        echo "ERROR: $tool not found" >&2
-        exit 1
-    fi
-done
+if ! command -v "$AARCH64_GCC" >/dev/null 2>&1 && [ ! -x "$AARCH64_GCC" ]; then
+    echo "ERROR: $AARCH64_GCC not found" >&2
+    exit 1
+fi
+if ! command -v readelf >/dev/null 2>&1; then
+    echo "ERROR: readelf not found" >&2
+    exit 1
+fi
+if ! command -v "$ADB" >/dev/null 2>&1 && [ ! -x "$ADB" ]; then
+    echo "ERROR: $ADB not found" >&2
+    exit 1
+fi
 
 mkdir -p "$ANDROID_LIB_DIR"
 
@@ -24,7 +31,7 @@ pull_lib_if_missing() {
     local base
     base="$(basename "$device_path")"
     if [ ! -f "$ANDROID_LIB_DIR/$base" ]; then
-        adb pull "$device_path" "$ANDROID_LIB_DIR/"
+        "$ADB" pull "$device_path" "$ANDROID_LIB_DIR/"
     fi
 }
 
@@ -32,6 +39,7 @@ pull_lib_if_missing /vendor/lib64/libcdsprpc.so
 pull_lib_if_missing /apex/com.android.runtime/lib64/bionic/libc.so
 pull_lib_if_missing /apex/com.android.runtime/lib64/bionic/libdl.so
 pull_lib_if_missing /apex/com.android.runtime/lib64/bionic/libm.so
+pull_lib_if_missing /apex/com.android.runtime/lib64/ld-android.so
 pull_lib_if_missing /system/lib64/liblog.so
 
 # Build the DSP skel and generated FastRPC files through the normal path. This
@@ -98,6 +106,7 @@ EOF_START
     -Wl,-rpath,/apex/com.android.runtime/lib64/bionic \
     -Wl,-rpath,/system/lib64 \
     -Wl,-rpath,/vendor/lib64 \
+    -Wl,-rpath-link,"$ANDROID_LIB_DIR" \
     -L "$ANDROID_LIB_DIR" \
     "$BUILD_DIR/android_start.o" \
     "$BUILD_DIR/host_main.android.o" \

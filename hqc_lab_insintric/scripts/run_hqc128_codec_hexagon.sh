@@ -25,6 +25,23 @@ fi
 CLANG="$TOOLS_BIN/hexagon-clang"
 SIM="$TOOLS_BIN/hexagon-sim"
 BOOTER="$H2_INSTALL/bin/booter"
+MODE="${HQC_MODE:-128}"
+
+case "$MODE" in
+    128)
+        PARAM_DIR="hqc-1"
+        ;;
+    192)
+        PARAM_DIR="hqc-192"
+        ;;
+    256)
+        PARAM_DIR="hqc-256"
+        ;;
+    *)
+        echo "ERROR: HQC_MODE must be 128, 192, or 256."
+        exit 1
+        ;;
+esac
 
 for f in "$CLANG" "$SIM" "$BOOTER"; do
     if [ ! -f "$f" ]; then
@@ -33,25 +50,31 @@ for f in "$CLANG" "$SIM" "$BOOTER"; do
     fi
 done
 
-OUT="$PROJECT_DIR/build/hqc128_codec_demo_hexagon"
+OUT="$PROJECT_DIR/build/hqc${MODE}_codec_demo_hexagon"
 mkdir -p "$(dirname "$OUT")"
 
+DEMO_SRC="$PROJECT_DIR/demos/hqc128_codec_demo.c"
+if [ ! -f "$DEMO_SRC" ]; then
+    DEMO_SRC="$PROJECT_PARENT/demos/hqc128_codec_demo.c"
+fi
+
 SRCS=(
-    "$PROJECT_DIR/demos/hqc128_codec_demo.c"
+    "$DEMO_SRC"
     "$PROJECT_DIR/src/common/code.c"
     "$PROJECT_DIR/src/ref/gf.c"
     "$PROJECT_DIR/src/ref/reed_muller.c"
     "$PROJECT_DIR/src/ref/reed_solomon.c"
 )
 
-echo "=== Compiling HQC-128 codec for Hexagon ==="
+echo "=== Compiling HQC-$MODE codec for Hexagon ==="
 "$CLANG" -O2 -mv75 \
     -mhvx -mhvx-length=128B \
     -mhmx \
     -DARCHV=75 \
+    -DHQC_MODE="$MODE" \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
-    -I "$PROJECT_DIR/src/ref/hqc-1" \
+    -I "$PROJECT_DIR/src/ref/$PARAM_DIR" \
     -I "$H2_INSTALL/include" \
     -I "$H2_KERNEL" \
     -moslib=h2 \

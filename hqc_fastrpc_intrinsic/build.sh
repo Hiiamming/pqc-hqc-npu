@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROJECT_DIR="$ROOT_DIR/hqc_lab_insintric"
+PROJECT_DIR="${HQC_PROJECT_DIR:-$ROOT_DIR/hqc_lab_insintric}"
 HEXAGON_SDK_ROOT="${HEXAGON_SDK_ROOT:-$ROOT_DIR/../tools/hexagon-sdk}"
 
 QAIC="${QAIC:-$HEXAGON_SDK_ROOT/ipc/fastrpc/qaic/Ubuntu/qaic}"
@@ -15,6 +15,11 @@ TESTSIG="$HEXAGON_SDK_ROOT/tools/elfsigner/output/testsig-0xaa3ec42e.so"
 
 BUILD_DIR="$SCRIPT_DIR/build"
 GEN_DIR="$SCRIPT_DIR/generated"
+HQC_RS_FAST_NON_CT="${HQC_RS_FAST_NON_CT:-0}"
+HQC_GF_LUT_MUL="${HQC_GF_LUT_MUL:-0}"
+HQC_RM_EXPAND_LUT="${HQC_RM_EXPAND_LUT:-0}"
+HQC_RM_FUSED_FAST="${HQC_RM_FUSED_FAST:-0}"
+HQC_RS_ROOTS_HVX="${HQC_RS_ROOTS_HVX:-1}"
 
 HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}"
 case "$HQC_PARAM_LEVEL" in
@@ -75,6 +80,11 @@ echo "=== Building HQC-$HQC_PARAM_LEVEL cDSP HVX intrinsic skel, arch=$HEXAGON_A
     -DHQC_PARAM_LEVEL="$HQC_PARAM_LEVEL" \
     -DHQC_USE_HVX_INTRINSICS=1 \
     -DHQC_USE_HVX_RS_SYNDROME=1 \
+    -DHQC_RS_FAST_NON_CT="$HQC_RS_FAST_NON_CT" \
+    -DHQC_GF_LUT_MUL="$HQC_GF_LUT_MUL" \
+    -DHQC_RM_EXPAND_LUT="$HQC_RM_EXPAND_LUT" \
+    -DHQC_RM_FUSED_FAST="$HQC_RM_FUSED_FAST" \
+    -DHQC_RS_ROOTS_HVX="$HQC_RS_ROOTS_HVX" \
     -I "$GEN_DIR" \
     -I "$HEXAGON_SDK_ROOT/incs" \
     -I "$HEXAGON_SDK_ROOT/incs/stddef" \

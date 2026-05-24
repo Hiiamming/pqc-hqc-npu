@@ -445,3 +445,32 @@ void reed_solomon_decode(uint64_t *msg, uint64_t *cdw) {
 
     memset(cdw_bytes, 0, sizeof cdw_bytes);
 }
+
+#if defined(HQC_ENABLE_SUBSTAGE_BENCH)
+void hqc_rs_bench_compute_syndromes(uint16_t *syndromes, uint8_t *cdw) {
+    compute_syndromes(syndromes, cdw);
+}
+
+uint16_t hqc_rs_bench_compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
+    return compute_elp(sigma, syndromes);
+}
+
+void hqc_rs_bench_compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree) {
+    (void)degree;
+    compute_roots(error, sigma);
+}
+
+void hqc_rs_bench_compute_z_poly(uint16_t *z, const uint16_t *sigma, uint16_t degree, const uint16_t *syndromes) {
+    compute_z_poly(z, sigma, degree, syndromes);
+}
+
+void hqc_rs_bench_compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree) {
+    (void)sigma;
+    (void)degree;
+    compute_error_values(error_values, z, error);
+}
+
+void hqc_rs_bench_correct_errors(uint8_t *cdw, const uint16_t *error_values) {
+    correct_errors(cdw, error_values);
+}
+#endif

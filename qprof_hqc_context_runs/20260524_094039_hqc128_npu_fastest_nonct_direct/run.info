@@ -1,0 +1,7 @@
+run_id=20260524_094039_hqc128_npu_fastest_nonct_direct
+label=hqc128_npu_fastest_nonct
+mode=direct
+sample_interval_s=0.1
+idle_seconds=1
+idle_position=both
+workload_cmd=cd /data/local/tmp/QDC_files/hqc_whole/hqc128_npu_fastest_nonct && chmod +x hqc_host && export ADSP_LIBRARY_PATH="$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp" && export LD_LIBRARY_PATH="$PWD:/vendor/lib64:/system/lib64:/apex/com.android.runtime/lib64/bionic" && ./hqc_host 10000

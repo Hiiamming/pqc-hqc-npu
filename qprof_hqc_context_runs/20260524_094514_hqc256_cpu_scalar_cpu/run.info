@@ -1,0 +1,12 @@
+run_id=20260524_094514_hqc256_cpu_scalar_cpu
+label=hqc256_cpu_scalar
+mode=cpu
+profile_time=30
+profile_start_delay=2
+streaming_rate=1000
+sampling_rate=200
+idle_power_w=
+caps=profiler:apps-proc-cpu-metrics profiler:apps-proc-battery-metrics profiler:apps-proc-thermal-metrics
+metrics=4616 4696 4720 4618 4619 4620 4621 4622 4623 4624 4703 4705 4708 6464 6465
+remote_result_dir=/data/shared/QualcommProfiler/profilingresults/20260524_094514_hqc256_cpu_scalar_cpu
+workload_cmd=cd /data/local/tmp/QDC_files/hqc_whole/hqc256_cpu_scalar && chmod +x hqc256_decode_bench_arm64_android && ./hqc256_decode_bench_arm64_android

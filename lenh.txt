@@ -1,0 +1,27 @@
+qaic -I /home/hiiamming/Code/test/hexagon-tutorial/tools/hexagon-sdk/incs adder.idl
+
+hexagon-clang -O2 -shared -I. \
+-I$HEXAGON_SDK_ROOT/incs \
+-I$HEXAGON_SDK_ROOT/incs/stddef \
+adder_skel.c dsp.c -o libadder_skel.so
+
+aarch64-linux-gnu-gcc -O2 -I. \
+-I/home/hiiamming/Code/test/hexagon-tutorial/tools/hexagon-sdk/incs \
+-I/home/hiiamming/Code/test/hexagon-tutorial/tools/hexagon-sdk/incs/stddef \
+host.c adder_stub.c \
+-L/home/hiiamming/Code/test/hexagon-tutorial/tools/hexagon-sdk/ipc/fastrpc/remote/ship/UbuntuARM_aarch64 \
+-lcdsprpc -lpthread -o adder_host
+
+
+scp -P 2222 -i "C:\Users\ADMIN\Downloads\qdc_id_2026-5-13_317.pem" adder_host libadder_skel.so root@localhost:/data/local/tmp/QDC_files/test_on_board/
+
+scp -P 2222 -i "C:\Users\ADMIN\Downloads\qdc_id_2026-5-13_317.pem" tools/hexagon-sdk/tools/elfsigner/output/testsig-0xaa3ec42e.so root@localhost:/data/local/tmp/QDC_files/test_on_board/
+
+cat /sys/devices/soc0/serial_number
+2856240174
+root@qcs6490-rb3gen2-core-kit:/data/local/tmp/QDC_files/test_on_board# export ADSP_LIBRARY_PATH="$PWD;/usr/lib/dsp/cdsp"
+root@qcs6490-rb3gen2-core-kit:/data/local/tmp/QDC_files/test_on_board# export LD_LIBRARY_PATH="$PWD:/usr/lib"
+root@qcs6490-rb3gen2-core-kit:/data/local/tmp/QDC_files/test_on_board# ./adder_host
+ARM: Gui lenh xuong DSP tinh 69 + 96
+DSP: Tra ve ket qua = 165
+Ngon cmnl, duong ong thong roi!

@@ -3,6 +3,186 @@
 ## Current layout
 sysdump meminfo check DMA up better
 Qualcomm Profiler
+• Được, dùng CLI được. Kết quả NPU:
+
+  - NPU0 có xuất hiện: profiler:nsp-dsp-metrics
+  - NPU1 có xuất hiện: profiler:nsp1-dsp-metrics
+  - NPU1 profile chạy được và có số đo thật.
+  - NPU0 hiện query metrics fail: sysmon profiler query metrics failed with error code= -2
+
+  Lệnh check NPU:
+
+  "C:\Program Files (x86)\Qualcomm\QualcommProfiler\CLI\host-windows-64\bins\qprof.exe" --capabilities
+
+  Lệnh profile NPU1 chạy được:
+
+  "C:\Program Files (x86)\Qualcomm\QualcommProfiler\CLI\host-windows-64\bins\qprof.exe" --profile --capabilities-list
+  profiler:nsp1-dsp-metrics --profile-time 3 --streaming-rate 1000 --sampling-rate 200 --live --result-format verbose
+  --summary
+
+  Sample NPU1 đo được:
+
+  MPPS avg: 0.742914
+  QDSP6 Load avg: 2.320946 MCPS
+  QDSP6 Utilization avg: 0.156990 %
+  QDSP Clock: 1478.400 MHz
+  MemNoc Clock Vote: 1012.320 MHz
+
+  File kết quả nằm ở:
+
+  C:\ProgramData\Qualcomm\QualcommProfiler\profilingresults\22-05-2026_12-23-54\
+
+  Nếu server chết sau reboot/disconnect, start lại bằng:
+
+  adb shell 'nohup sh -c "export QMONITOR_BACKEND_LIB_PATH=/vendor/qprof/backends/; export LD_LIBRARY_PATH=\
+  $LD_LIBRARY_PATH:/vendor/qprof/libs/; /vendor/bin/qprof --configure --server-ip 192.168.5.82 --port 62472; /vendor/
+  bin/qprof --start-server" >/data/local/tmp/qprof-server.log 2>&1 &'
+
+  Tóm lại: bỏ GUI được. NPU1 đo được bằng CLI; NPU0 có expose capability nhưng hiện không query được metrics trên device
+  này.
+
+
+   Có. CLI hỗ trợ realtime bằng flag --live.
+
+  Ví dụ xem realtime NPU1:
+
+  "C:\Program Files (x86)\Qualcomm\QualcommProfiler\CLI\host-windows-64\bins\qprof.exe" --profile --capabilities-list
+  profiler:nsp1-dsp-metrics --profile-time 30 --streaming-rate 1000 --sampling-rate 200 --live --result-format verbose
+
+  - --profile-time 30: chạy 30 giây
+  - --streaming-rate 1000: in dữ liệu mỗi 1 giây
+  - --sampling-rate 200: sample mỗi 200 ms
+  - --live: stream ra terminal realtime
+
+  Muốn realtime gọn hơn, chỉ xem vài metric quan trọng:
+
+  "C:\Program Files (x86)\Qualcomm\QualcommProfiler\CLI\host-windows-64\bins\qprof.exe" --profile --capabilities-list
+  profiler:nsp1-dsp-metrics --profile-time 30 --streaming-rate 1000 --sampling-rate 200 --metric-id-list 4096 4097 4098
+  4182 --live --result-format verbose
+
+  Metric chính:
+
+  4096 = MPPS
+  4097 = QDSP6 Load
+  4098 = QDSP6 Utilization
+  4182 = QDSP Clock
+
+  Nếu muốn gần như “monitor” liên tục, tăng --profile-time, ví dụ 3600 cho 1 giờ.
+
+• Có đo được, nhưng cần phân biệt:
+
+  - Profiler đo được battery voltage/current, CPU load/clock, thermal, NPU metrics.
+  - Nó không đo trực tiếp “NPU rail power” riêng. Energy tính được từ battery là whole-device power, phù hợp để so CPU
+    vs NPU nếu benchmark được kiểm soát tốt.
+
+  Trên device này có battery metrics:
+
+  4703 Battery Voltage      micro V
+  4705 Battery Current      micro amperes
+  4706 Battery Capacity     %
+  4708 Battery Temperature  deg C
+
+  Công thức xấp xỉ:
+
+  Power W = voltage_uV * abs(current_uA) / 1e12
+  Energy J = sum(Power W * dt seconds)
+
+  Để so HQC CPU vs NPU, mình sẽ đo kiểu này:
+
+  CPU run:
+
+  qprof.exe --profile ^
+    --capabilities-list profiler:apps-proc-cpu-metrics profiler:apps-proc-battery-metrics profiler:apps-proc-thermal-
+  metrics ^
+    --metric-id-list 4616 4696 4703 4705 4708 6464 ^
+    --profile-time 30 --streaming-rate 1000 --sampling-rate 200 ^
+    --live --result-format csv --summary
+
+  NPU run:
+
+  qprof.exe --profile ^
+    --capabilities-list profiler:nsp1-dsp-metrics profiler:apps-proc-battery-metrics profiler:apps-proc-thermal-metrics
+  ^
+    --metric-id-list 4096 4097 4098 4182 4183 4703 4705 4708 6464 ^
+    --profile-time 30 --streaming-rate 1000 --sampling-rate 200 ^
+    --live --result-format csv --summary
+
+  NPU metrics quan trọng:
+  4097 QDSP6 Load
+  4098 QDSP6 Utilization
+  4182 QDSP Clock
+  4183 MemNoc Clock Vote
+
+  Cách benchmark HQC hợp lý:
+
+  1. Chạy mỗi backend nhiều vòng cố định, ví dụ 1000 decaps/decode.
+  2. Đo wall time riêng bằng app: ns/op, ops/s.
+  3. Đồng thời log Profiler battery current/voltage.
+  4. Tính:
+      - energy_per_decode = total_energy_J / num_decodes
+      - throughput_per_watt = decodes_per_second / avg_power_W
+  5. So thêm CPU load/clock và thermal để biết có throttling không.
+
+  Lưu ý: nếu device đang cắm sạc, Battery Current có thể bị nhiễu hoặc đổi dấu. Muốn số energy nghiêm túc nhất thì chạy
+  bằng pin, màn hình cố định brightness, tắt background app, warm-up trước rồi đo.
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+› nma cái đo năng lượng đấy là như nào z, đang đo trên toàn mạch à
+
+
+• Đúng, kiểu đo bằng Battery Voltage + Battery Current là đo ở mức toàn thiết bị, gần như công suất vào/ra từ pin, không
+  phải riêng NPU.
+
+  Nó phản ánh tổng tiêu thụ của cả board/device tại thời điểm đó:
+
+  CPU + NPU/DSP + GPU + DRAM + display + Wi-Fi + storage + sensors + PMIC loss + background services
+
+  Công thức:
+
+  Power ≈ Voltage × Current
+
+  Với Profiler:
+
+  Power_W = BatteryVoltage_microV * abs(BatteryCurrent_microA) / 1e12
+
+  Ví dụ:
+
+  Voltage = 3,850,000 uV
+  Current = -800,000 uA
+  Power ≈ 3.08 W
+
+  Sau đó tích phân theo thời gian:
+
+  Energy_J = Σ Power_W * Δt
+
+  Nhưng đây là whole-device energy, nên khi so CPU vs NPU phải đo kiểu delta:
+
+  Idle baseline power:   P_idle
+  CPU run avg power:     P_cpu_total
+  NPU run avg power:     P_npu_total
+
+  CPU extra power ≈ P_cpu_total - P_idle
+  NPU extra power ≈ P_npu_total - P_idle
+
+  Rồi:
+
+  CPU energy/decode ≈ (P_cpu_total - P_idle) * runtime / num_decodes
+  NPU energy/decode ≈ (P_npu_total - P_idle) * runtime / num_decodes
+
+  Nó vẫn không phải “NPU rail power”, nhưng đủ dùng để trả lời câu thực dụng: port lên NPU có làm toàn thiết bị tốn ít
+  năng lượng hơn / nhanh hơn không.
+
+  Muốn đo riêng rail NPU/SoC chuẩn hơn thì cần một trong các thứ này:
+
+  - power rail monitor exposed bởi board/kernel
+  - PMIC fuel gauge/rail debugfs/sysfs nếu có
+  - Trepn/Power Monitor tương thích platform
+  - external power analyzer đo nguồn cấp board
+  - Qualcomm internal tools nếu device hỗ trợ
+
+  Với setup hiện tại, mình sẽ dùng: idle baseline + battery current/voltage + runtime + NPU/CPU utilization/clock.
 
 - `hqc_lab_scalar/`: portable scalar C baseline. Its Hexagon decode benchmark intentionally builds without `-mhvx`.
 - `hqc_lab_insintric/`: Hexagon HVX intrinsic variant. The folder name keeps the spelling requested in the task.
@@ -30,6 +210,145 @@ HQC-192 and HQC-256 use the same script naming with the prefix swapped, and the 
 | HQC-256 | 90 | 640 | 57,600 | 29 | 32 | 59 | 5 | 5 |
 
 The RS field is the same GF(2^8) with primitive polynomial `0x11D` for every set. The per-set Reed-Solomon generator polynomial coefficients are encoded in `RS_POLY_COEFS` in each `parameters.h`. The `alpha_ij_pow[2*PARAM_DELTA][PARAM_N1-1]` table is precomputed and embedded in `src/ref/hqc-<set>/reed_solomon.h`.
+
+## Plan A: multiplicity-5 RM expand LUT
+
+Status: simulator-validated and QRD8650 hardware-validated for direct latency.
+
+Reason for the change:
+
+- HQC-128 uses RM multiplicity 3 and already had a dedicated `rm_expand3_nibble_table[4096]` path.
+- HQC-192 and HQC-256 use RM multiplicity 5 and previously fell back to generic arithmetic expansion.
+- The generic multiplicity-5 `rm_expand` path was the strongest suspect for HQC-192 scaling badly on QRD8650.
+
+Patch strategy:
+
+- Do not build a direct 5-copy table (`16^5` entries), because that is too large.
+- Reuse the existing 3-copy table and add a small 2-copy table:
+
+  ```text
+  5-copy expand = lookup(copy0, copy1, copy2) + lookup(copy3, copy4)
+  ```
+
+- Added `rm_expand2_nibble_table[256]`, about 2 KiB, and enabled the 3+2 LUT path only for `MULTIPLICITY == 5`.
+
+Simulator check, `iters=100`, all cases PASS:
+
+| Check | Before Pcycles | After Pcycles | Improvement |
+| --- | ---: | ---: | ---: |
+| HQC-128 `rm_expand` | 27,393,015 | 27,393,015 | unchanged |
+| HQC-192 `rm_expand` | 216,966,471 | 58,957,980 | 3.68x |
+| HQC-256 `rm_expand` | 346,715,262 | 92,668,596 | 3.74x |
+| HQC-128 full decode | 81,134,130 | 81,134,130 | unchanged |
+| HQC-192 full decode | 275,067,750 | 120,965,505 | 2.27x |
+| HQC-256 full decode | 440,345,550 | 192,572,535 | 2.29x |
+
+Pcycles per decode after Plan A, with 1600 decodes per run:
+
+| HQC | `rm_expand` Pcycles/decode | Full decode Pcycles/decode |
+| --- | ---: | ---: |
+| 128 | 17,120.6 | 50,708.8 |
+| 192 | 36,848.7 | 75,603.4 |
+| 256 | 57,917.9 | 120,357.8 |
+
+Remaining loopholes before calling the strategy hardware-proven:
+
+- The simulator can overstate or understate table-cache behavior versus QRD8650 cDSP.
+- The Android FastRPC path can include runtime/cache/setup effects not present in simulator full decode.
+- QRD8650 qprof energy/thermal metrics are invalid in the current session, so validation should use direct wall-clock first and qprof counters second.
+
+Local Android Plan A artifacts are ready here:
+
+```text
+hqc_fastrpc_intrinsic_android/hqc192_npu_fastest_nonct_planA/
+hqc_fastrpc_intrinsic_android/hqc256_npu_fastest_nonct_planA/
+```
+
+QRD8650 hardware validation on device `ac6088de`:
+
+- Energy/thermal sanity failed again: qprof idle reported about `0.026 W` and
+  thermal max `4294694.296000 C`, so energy and thermal are not valid for this
+  QRD8650 session.
+- Direct Plan A latency is therefore the primary result. Each line below is
+  one `./hqc_host 10000` run, i.e. `160000` decodes.
+
+| HQC | Old NPU direct us/decode | Plan A direct us/decode | Speedup vs old NPU | Old CPU scalar us/decode | Plan A speedup vs CPU |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 192 | 106.550 / 106.508 / 106.737 | 41.218 / 41.210 / 41.208 | about 2.59x | 92.266 / 92.278 / 92.342 | about 2.24x |
+| 256 | 165.896 / 165.898 / 165.916 | 62.753 / 62.756 / 62.759 | about 2.64x | 202.058 / 202.030 / 203.999 | about 3.22x |
+
+qprof NPU-only runs were useful for DSP counters but perturb the wall-clock
+latency. After qprof, direct runs stayed at the slower qprof-clock state until
+reboot. Treat direct post-reboot latency as the timing result and qprof as
+counters only:
+
+| HQC | qprof run us/decode | NPU util avg % | QDSP clk MHz | HMX util avg % | Note |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 192 | 60.456 | 99.035969 | 1252.417391 | 0.000000 | `profile_rc=139`, workload PASS |
+| 256 | 92.225 | 99.112840 | 1251.952026 | 0.000000 | rerun; `profile_rc=139`, workload PASS |
+
+Raw qprof logs are under:
+
+```text
+qprof_qrd8650_planA_runs/
+```
+
+HDK8550 hardware validation on device `417a1107`:
+
+- Existing HQC-128 HDK8550 numbers were kept as the reference because the
+  previous energy/counter run was already valid.
+- HQC-192 and HQC-256 were rerun on the NPU/cDSP FastRPC path after Plan A.
+- Energy was measured with qprof battery voltage/current and an immediately
+  preceding idle baseline. For Plan A, shorter qprof windows were used where
+  possible because the optimized workload finishes much faster than the older
+  30 s qprof window.
+
+Clean direct post-reboot latency:
+
+| HQC | Old NPU us/decode | Plan A direct us/decode | Speedup vs old NPU | Old CPU scalar us/decode | Plan A speedup vs CPU |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 192 | 113.198 | 50.779 / 50.748 / 50.743 | about 2.23x | 103.392 | about 2.04x |
+| 256 | 176.205 | 77.079 / 77.065 / 77.109 | about 2.29x | 227.038 | about 2.95x |
+
+qprof energy/counter runs:
+
+| HQC | qprof run | us/decode | delta W | uJ/decode | NPU util avg % | QDSP clk MHz | HMX util avg % | Note |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 192 | tight energy/timing | 50.748 | 0.208192631 | 10.565 |  |  |  | Energy/timing clean; NPU counters blank. |
+| 192 | counter run | 63.886 | 1.230158302 | 78.590 | 98.897193 | 1165.874385 | 0.000000 | Counters valid; qprof perturbed timing/power. |
+| 256 | tight energy/counter | 97.075 | 2.501786568 | 242.860 | 99.686675 | 1172.041121 | 0.000000 | Energy and counters valid, but qprof latency is slower than direct. |
+
+Raw qprof logs are under:
+
+```text
+qprof_hdk8550_planA_runs/
+```
+
+Measurement caveat:
+
+- `BOARD_RESULTS.md` used direct sysfs battery sampling through
+  `measure_board_energy.sh`, while the HDK8550 table in `README_result_whole.md`
+  uses qprof battery metrics. These are not the same harness.
+- qprof can perturb cDSP/NPU clock state; after qprof, direct runs stayed at
+  qprof-like latency until reboot. Use post-reboot direct latency for speed and
+  qprof rows for battery/counter evidence.
+- HMX stayed at `0`, so this remains cDSP/QDSP-HVX through FastRPC, not HMX
+  matrix-engine offload.
+
+Deploy and hardware validation commands:
+
+```sh
+for level in 192 256; do
+  src="hqc_fastrpc_intrinsic_android/hqc${level}_npu_fastest_nonct_planA"
+  dst="/data/local/tmp/QDC_files/hqc_whole/hqc${level}_npu_fastest_nonct_planA"
+  /mnt/c/Temp/ADB/platform-tools/adb.exe shell "mkdir -p '$dst'"
+  /mnt/c/Temp/ADB/platform-tools/adb.exe push "$src/hqc_host" "$dst/"
+  /mnt/c/Temp/ADB/platform-tools/adb.exe push "$src/libhqc_skel.so" "$dst/"
+  /mnt/c/Temp/ADB/platform-tools/adb.exe push "$src/testsig-0xaa3ec42e.so" "$dst/"
+done
+
+/mnt/c/Temp/ADB/platform-tools/adb.exe shell 'set -e; for level in 192 256; do cd /data/local/tmp/QDC_files/hqc_whole/hqc${level}_npu_fastest_nonct_planA; export ADSP_LIBRARY_PATH="$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp"; export LD_LIBRARY_PATH="$PWD:/vendor/lib64:/system/lib64:/apex/com.android.runtime/lib64/bionic"; for i in 1 2 3; do ./hqc_host 10000; done; done'
+```
 
 ## Default fastest intrinsic comparison across HQC-128/192/256
 
@@ -89,6 +408,7 @@ Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode 
 | 14 | Reduced fastest benchmark-only RM expand loop overhead by unrolling the HQC-128 3-copy word/nibble table lookups. | `hqc_lab_insintric/src/ref/reed_muller.c`: `expand_rm_copies_fast` |
 | 15 | Reduced fastest benchmark-only RM Hadamard loop overhead by unrolling the seven fixed HVX butterfly passes. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_hadamard_rows_hvx` |
 | 16 | Reduced fastest benchmark-only RS loop overhead by unrolling fixed-bound syndrome, ELP, error scan, and correction loops. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_syndromes_hvx`, `compute_elp`, `compute_error_values`, `correct_errors` |
+| 17 | Added the Plan A multiplicity-5 RM expand LUT path for HQC-192/256 by splitting five repeated RM copies into the existing 3-copy nibble LUT plus a new 2-copy nibble LUT. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_expand2_nibble_table`, `init_rm_expand2_nibble_table`, `expand_rm_copies_fast` |
 
 
 ## Implemented so far
@@ -246,6 +566,8 @@ These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` means 160 total d
 | `hqc_lab_insintric` twelfth pass fast non-CT + GF table LUT + RM LUT + fused RM + HVX roots | 1 | 16 | PASS | 3,353,940 | 4,417,002 |
 | `hqc_lab_insintric` thirteenth pass CT default + CT-HVX roots + arithmetic fused RM | 10 | 16 | PASS | 35,648,131 | 43,766,676 |
 | `hqc_lab_insintric` thirteenth pass CT default + CT-HVX roots + arithmetic fused RM | 1 | 16 | PASS | 5,287,097 | 6,792,540 |
+| `hqc_lab_insintric - 13pass backup` CT-only refactor verification | 10 | 16 | PASS | 35,463,810 | 43,082,616 |
+| `hqc_lab_insintric - 13pass backup` CT-only refactor verification | 1 | 16 | PASS | 5,268,232 | 6,724,080 |
 | `hqc_lab_insintric` thirteenth pass fastest non-CT regression check | 10 | 16 | PASS | 9,812,288 | 12,855,702 |
 | `hqc_lab_insintric` thirteenth pass fastest non-CT regression check | 1 | 16 | PASS | 3,353,940 | 4,417,002 |
 | `hqc_lab_insintric` fourteenth pass fastest non-CT + unrolled RM expand LUT | 10 | 16 | PASS | 8,373,094 | 11,653,638 |
@@ -311,6 +633,8 @@ Thirteenth-pass CT default substage snapshots with fixed-flow RS-local GF helper
 | RS ELP | 24,466,578 | 12,678,789 | 81,860/decode | 25.4% lower |
 | RS roots/HVX Chien | 11,920,686 | 11,424,264 | 3,447/decode | 95.4% lower |
 | RS error values | 25,640,238 | 12,796,875 | 89,190/decode | 31.9% lower |
+
+The `hqc_lab_insintric - 13pass backup` CT-only refactor rerun kept these checkpoints within or below the recorded README numbers: RS ELP 1-iter `12,478,239`, RS roots 1-iter `11,223,510`, and RS error values 1-iter `12,567,417`, all PASS.
 
 Two full-decode isolation runs were used to check which default CT pieces mattered. With the thirteenth-pass RS arithmetic and error-value changes but both `HQC_RS_ROOTS_HVX=0` and `HQC_RM_FUSED_FAST=0`, full decode was 316,222 Pcycles/decode. With `HQC_RS_ROOTS_HVX=1` and `HQC_RM_FUSED_FAST=0`, it was 258,844 Pcycles/decode. With both thirteenth-pass defaults enabled, it was 256,765 Pcycles/decode. Most of the full-decode win therefore comes from fixed-flow HVX roots and RS arithmetic/error-value changes; arithmetic fused RM is a small default win after the CT peak-sign fix.
 
@@ -388,6 +712,9 @@ These runs used `HQC_RS_FAST_NON_CT=1`, `HQC_GF_LUT_MUL=1`, `HQC_RM_EXPAND_LUT=1
 11. Done: unroll selected fastest-path RS fixed loops.
     The sixteenth pass keeps the same branchy fastest non-CT RS algebra but asks the compiler to unroll fixed-bound syndrome, Berlekamp-Massey outer, error-position scan, and correction loops. A trial unroll of the `z` zeroing loop was rejected because it produced no full-decode improvement.
 
+12. Done: add a multiplicity-5 RM expand LUT path for HQC-192/256.
+    The seventeenth pass fixes the HQC-192/256 fastest-path scaling issue by replacing the generic five-copy arithmetic RM expansion with a compact table split: existing 3-copy nibble LUT plus a new 2-copy nibble LUT. This avoids a direct `16^5` table, keeps the memory footprint small, leaves HQC-128 unchanged, and was validated by simulator plus QRD8650 and HDK8550 Android hardware runs.
+
 ## Confidence notes
 
 The safe second-pass step was candidate 1: replacing the scalar even/odd gather with HVX deal/deinterleave. It was narrower than rewriting `expand_and_sum`, kept the same data representation, and directly fixed a measured weakness in the first intrinsic pass.
@@ -419,3 +746,5 @@ For the fourteenth pass, confidence is scoped to the benchmark-only fastest non-
 For the fifteenth pass, confidence is scoped to the same benchmark-only fastest non-CT path. The loopholes checked were code-size/scheduling regression from unrolling the Hadamard hardware loop and accidental breakage for HQC-192/256 multiplicity-5 decode. The accepted Hadamard unroll passed HQC-128 1-iter and 10-iter full decode, improved the corpus estimate to 50,604 Pcycles/decode, passed the affected RM Hadamard substage, and passed HQC-192/256 1-iter decode checks.
 
 For the sixteenth pass, confidence is scoped to the same benchmark-only fastest non-CT path and Hexagon simulator Pcycles. The loopholes checked were code-size regressions from pragma unrolling, substage-only wins, and parameter-set breakage. The accepted RS loop unrolls passed HQC-128 1-iter and 10-iter full decode, improved the corpus estimate to 48,518 Pcycles/decode, passed the affected RS syndrome/ELP/error-values/correct substages, and passed HQC-192/256 1-iter decode checks. The `rs_z` unroll trial was rejected because it produced no measurable full-decode gain.
+
+For the seventeenth pass, confidence is scoped to the benchmark-only fastest non-CT HQC-192/256 path and measured device latency. The loopholes checked were direct 5-copy LUT size, table-cache regression, accidental HQC-128 regression, simulator-only wins, FastRPC/Android hardware mismatch, and qprof perturbing cDSP clock state. The accepted 3+2 LUT split passed simulator substage and full-decode checks, left HQC-128 simulator results unchanged, improved HQC-192/256 simulator full decode by about 2.27x/2.29x, improved QRD8650 direct NPU latency to about 41.21 us/62.76 us, and improved HDK8550 direct NPU latency to about 50.75 us/77.08 us. qprof was kept for energy/counter evidence only because it can perturb post-run direct latency until reboot.

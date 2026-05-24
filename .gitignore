@@ -36,7 +36,23 @@ Thumbs.db
 
 # Agent / harness state (worktrees, session files).
 .claude/
+.agents/
+.codex/
 
 # Ad-hoc local probe scripts and logs that don't belong in history.
 tmp_*.sh
 tmp_*.log
+
+
+# Né mấy cái folder chứa kết quả chạy profile NPU
+qprof_qrd8650_whole_runs/
+qprof_hqc_whole_runs/
+qprof_hqc_ct_repeat_runs/
+qprof_hqc_fixed_runs/
+qprof_hqc_ct_runs/
+qprof_hdk8550_planA_runs/
+qprof_hqc_fixed_runs2/
+
+# Hoặc cẩn thận hơn thì chặn luôn tất cả file log và json nặng trong cụm này
+*.log
+*-metrics.json
