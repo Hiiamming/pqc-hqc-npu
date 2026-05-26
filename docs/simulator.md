@@ -4,7 +4,7 @@ Run full decode on the Hexagon simulator:
 
 ```sh
 scripts/sim_decode.sh --variant scalar --level 128 --bench decode --iters 10
-scripts/sim_decode.sh --variant fastest --level 192 --bench decode --iters 10
+scripts/sim_decode.sh --variant fastest --level 128 --bench decode --iters 10
 scripts/sim_decode.sh --variant ct --level 256 --bench decode --iters 10
 ```
 

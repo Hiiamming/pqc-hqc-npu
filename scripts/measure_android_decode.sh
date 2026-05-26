@@ -10,11 +10,14 @@ STREAMING_RATE="${STREAMING_RATE:-1000}"
 SAMPLING_RATE="${SAMPLING_RATE:-200}"
 HEXAGON_ARCH="${HEXAGON_ARCH:-v68}"
 LEVELS="${LEVELS:-128 192 256}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
+RUN_DIRECT_ENERGY="${RUN_DIRECT_ENERGY:-1}"
 RUN_QPROF_CONTEXT="${RUN_QPROF_CONTEXT:-0}"
 DIRECT_SAMPLE_INTERVAL="${DIRECT_SAMPLE_INTERVAL:-0.1}"
 DIRECT_IDLE_SECONDS="${DIRECT_IDLE_SECONDS:-10}"
 DIRECT_IDLE_POSITION="${DIRECT_IDLE_POSITION:-both}"
 ENERGY_REMOTE_DIR="${ENERGY_REMOTE_DIR:-/data/local/tmp/QDC_files/hqc_whole}"
+PROCESS_CPU_SAMPLE_INTERVAL="${PROCESS_CPU_SAMPLE_INTERVAL:-0.02}"
 
 if [ ! -x "$ADB" ]; then
     echo "ERROR: ADB executable not found: $ADB" >&2
@@ -134,6 +137,12 @@ deploy_energy_script() {
     "$ADB" shell "chmod +x '$ENERGY_REMOTE_DIR/measure_board_energy.sh'"
 }
 
+deploy_process_cpu_script() {
+    "$ADB" shell "mkdir -p '$ENERGY_REMOTE_DIR'"
+    "$ADB" push "$ROOT_DIR/scripts/measure_process_cpu.sh" "$ENERGY_REMOTE_DIR/" >/dev/null
+    "$ADB" shell "chmod +x '$ENERGY_REMOTE_DIR/measure_process_cpu.sh'"
+}
+
 run_direct() {
     local label="$1"
     local workload="$2"
@@ -222,6 +231,78 @@ EOF
     printf '%s\n' "$summary"
 }
 
+run_process_cpu() {
+    local label="$1"
+    local workload="$2"
+    local safe_label run_id out_dir log summary workload_script remote_workload_script
+
+    safe_label="$(printf '%s' "$label" | tr -c 'A-Za-z0-9_.-' '_')"
+    run_id="$(date +%Y%m%d_%H%M%S)_${safe_label}_process"
+    out_dir="$OUT_ROOT/$run_id"
+    log="$out_dir/process_cpu.log"
+    summary="$out_dir/summary.env"
+    workload_script="$out_dir/process_workload.sh"
+    remote_workload_script="$ENERGY_REMOTE_DIR/${safe_label}.process.workload.sh"
+    mkdir -p "$out_dir"
+
+    cat > "$workload_script" <<EOF
+#!/system/bin/sh
+set -eu
+$workload
+EOF
+    "$ADB" push "$workload_script" "$remote_workload_script" >/dev/null
+    "$ADB" shell "chmod +x '$remote_workload_script'"
+
+    cat > "$out_dir/run.info" <<EOF
+run_id=$run_id
+label=$label
+mode=process
+sample_interval_s=$PROCESS_CPU_SAMPLE_INTERVAL
+workload_cmd=$workload
+EOF
+
+    "$ADB" shell "cd '$ENERGY_REMOTE_DIR' && PROCESS_CPU_SAMPLE_INTERVAL='$PROCESS_CPU_SAMPLE_INTERVAL' PROCESS_CPU_TMP_DIR='$ENERGY_REMOTE_DIR' sh ./measure_process_cpu.sh '$label' sh '$remote_workload_script'" > "$log" 2>&1
+
+    local rc result elapsed_s elapsed_ms total us cpu_s cpu_pct cpu_ms ticks hz samples
+    rc="$(extract_field "$log" rc)"
+    result="$(extract_field "$log" result)"
+    elapsed_s="$(extract_field "$log" elapsed_s)"
+    elapsed_ms="$(extract_field "$log" elapsed_ms)"
+    total="$(extract_field "$log" total_decodes)"
+    us="$(extract_field "$log" us_per_decode)"
+    cpu_s="$(extract_field "$log" process_cpu_s)"
+    cpu_pct="$(extract_field "$log" process_cpu_pct)"
+    cpu_ms="$(extract_field "$log" cpu_ms_per_decode)"
+    ticks="$(extract_field "$log" cpu_ticks)"
+    hz="$(extract_field "$log" clk_tck)"
+    samples="$(extract_field "$log" samples)"
+
+    if [ -z "$elapsed_ms" ] && [ -n "$elapsed_s" ]; then
+        elapsed_ms="$(awk -v s="$elapsed_s" 'BEGIN {printf "%.3f", s * 1000.0}')"
+    fi
+
+    cat > "$summary" <<EOF
+run_id=$run_id
+label=$label
+mode=process
+workload_rc=$rc
+result=$result
+total_decodes=$total
+elapsed_s=$elapsed_s
+elapsed_ms=$elapsed_ms
+us_per_decode=$us
+process_cpu_s=$cpu_s
+process_cpu_pct=$cpu_pct
+cpu_ms_per_decode=$cpu_ms
+cpu_ticks=$ticks
+clk_tck=$hz
+process_samples=$samples
+out_dir=$out_dir
+EOF
+
+    printf '%s\n' "$summary"
+}
+
 direct_row_from_summary() {
     local level="$1"
     local backend="$2"
@@ -300,10 +381,39 @@ qprof_row_from_summary() {
         "${memnoc:-}" "${therm:-}" "$pvalid" "$tvalid/$nvalid" "$out_dir"
 }
 
+process_row_from_summary() {
+    local level="$1"
+    local backend="$2"
+    local summary="$3"
+    local baseline_summary="${4:-}"
+    local result total elapsed us cpu_s cpu_pct cpu_ms reduction samples out_dir base_cpu_ms
+    result="$(read_summary "$summary" result)"
+    total="$(read_summary "$summary" total_decodes)"
+    elapsed="$(read_summary "$summary" elapsed_ms)"
+    us="$(read_summary "$summary" us_per_decode)"
+    cpu_s="$(read_summary "$summary" process_cpu_s)"
+    cpu_pct="$(read_summary "$summary" process_cpu_pct)"
+    cpu_ms="$(read_summary "$summary" cpu_ms_per_decode)"
+    samples="$(read_summary "$summary" process_samples)"
+    out_dir="$(dirname "$summary")"
+    reduction=""
+    if [ -n "$baseline_summary" ]; then
+        base_cpu_ms="$(read_summary "$baseline_summary" cpu_ms_per_decode)"
+        if [ -n "$base_cpu_ms" ] && [ -n "$cpu_ms" ]; then
+            reduction="$(awk -v base="$base_cpu_ms" -v cur="$cpu_ms" 'BEGIN {if (base > 0) printf "%.3f", 100.0 * (base - cur) / base}')"
+        fi
+    fi
+    printf '| HQC-%s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | `%s` |\n' \
+        "$level" "$backend" "${result:-NA}" "${total:-}" "${elapsed:-}" "${us:-}" \
+        "${cpu_s:-}" "${cpu_pct:-}" "${cpu_ms:-}" "${reduction:-}" "${samples:-}" "$out_dir"
+}
+
 direct_rows_file="$OUT_ROOT/direct_rows.md"
+process_rows_file="$OUT_ROOT/process_rows.md"
 qprof_rows_file="$OUT_ROOT/qprof_rows.md"
 raw_file="$OUT_ROOT/raw_result_lines.txt"
 : > "$direct_rows_file"
+: > "$process_rows_file"
 : > "$qprof_rows_file"
 : > "$raw_file"
 
@@ -332,8 +442,12 @@ Profiler settings:
 - \`DIRECT_SAMPLE_INTERVAL=$DIRECT_SAMPLE_INTERVAL\`
 - \`DIRECT_IDLE_SECONDS=$DIRECT_IDLE_SECONDS\`
 - \`DIRECT_IDLE_POSITION=$DIRECT_IDLE_POSITION\`
+- direct energy enabled: \`RUN_DIRECT_ENERGY=$RUN_DIRECT_ENERGY\`
 - qprof context enabled: \`RUN_QPROF_CONTEXT=$RUN_QPROF_CONTEXT\`
 - qprof \`PROFILE_TIME=$PROFILE_TIME\`, \`STREAMING_RATE=$STREAMING_RATE\`, \`SAMPLING_RATE=$SAMPLING_RATE\`
+- Process CPU source: per-thread \`/proc/<pid>/task/*/stat\` ticks sampled by \`measure_process_cpu.sh\`
+- \`PROCESS_CPU_SAMPLE_INTERVAL=$PROCESS_CPU_SAMPLE_INTERVAL\`
+- Build/deploy artifacts skipped: \`SKIP_BUILD=$SKIP_BUILD\`
 - NPU profiler capability: \`profiler:nsp1-dsp-metrics\`
 - CPU path: scalar ARM64 baseline built as an Android/Bionic PIE executable
 - NPU path: current \`hqc_lab_insintric\` fastest non-CT FastRPC build flags (\`HQC_RS_FAST_NON_CT=1\`, \`HQC_GF_LUT_MUL=1\`, \`HQC_RM_EXPAND_LUT=1\`, \`HQC_RM_FUSED_FAST=1\`, \`HQC_RS_ROOTS_HVX=1\`)
@@ -345,6 +459,14 @@ Energy numbers in the main table use direct device power-supply samples with qpr
 | HQC | Backend | Result | Total decodes | elapsed ms | us/decode | decodes/s | idle W | run W | delta W | delta J | uJ/decode | decodes/s/W | run samples | Raw dir |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 $(cat "$direct_rows_file")
+
+## Process CPU Offload Results
+
+These rows measure CPU time consumed by the decoder process itself. qprof CPU metrics are whole-system diagnostics and are not used for offload conclusions.
+
+| HQC | Backend | Result | Total decodes | elapsed ms | us/decode | process CPU s | process CPU % | CPU ms/decode | Reduction vs CPU % | samples | Raw dir |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+$(cat "$process_rows_file")
 
 ## qprof Diagnostic Context
 
@@ -367,18 +489,30 @@ echo "[whole] OUT_ROOT=$OUT_ROOT"
 echo "[whole] RESULT_MD=$RESULT_MD"
 echo "[whole] LEVELS=$LEVELS"
 deploy_energy_script
+deploy_process_cpu_script
 
 for level in $LEVELS; do
     cpu_iters="$(iters_for CPU "$level")"
     npu_iters="$(iters_for NPU "$level")"
 
     echo "[whole] === HQC-$level CPU scalar, iters=$cpu_iters ==="
-    build_cpu "$level" "$cpu_iters"
-    cpu_dir="$(deploy_cpu "$level")"
+    if [ "$SKIP_BUILD" = "1" ]; then
+        cpu_dir="/data/local/tmp/QDC_files/hqc_whole/hqc${level}_cpu_scalar"
+    else
+        build_cpu "$level" "$cpu_iters"
+        cpu_dir="$(deploy_cpu "$level")"
+    fi
     cpu_workload="cd $cpu_dir && chmod +x hqc${level}_decode_bench_arm64_android && ./hqc${level}_decode_bench_arm64_android"
-    cpu_direct_summary="$(run_direct "hqc${level}_cpu_scalar" "$cpu_workload")"
-    direct_row_from_summary "$level" "CPU scalar" "$cpu_direct_summary" >> "$direct_rows_file"
-    cat "$cpu_direct_summary" >> "$raw_file"
+    cpu_process_workload="cd $cpu_dir && chmod +x hqc${level}_decode_bench_arm64_android && exec ./hqc${level}_decode_bench_arm64_android"
+    if [ "$RUN_DIRECT_ENERGY" = "1" ]; then
+        cpu_direct_summary="$(run_direct "hqc${level}_cpu_scalar" "$cpu_workload")"
+        direct_row_from_summary "$level" "CPU scalar" "$cpu_direct_summary" >> "$direct_rows_file"
+        cat "$cpu_direct_summary" >> "$raw_file"
+        printf '\n' >> "$raw_file"
+    fi
+    cpu_process_summary="$(run_process_cpu "hqc${level}_cpu_scalar" "$cpu_process_workload")"
+    process_row_from_summary "$level" "CPU scalar" "$cpu_process_summary" "$cpu_process_summary" >> "$process_rows_file"
+    cat "$cpu_process_summary" >> "$raw_file"
     printf '\n' >> "$raw_file"
     if [ "$RUN_QPROF_CONTEXT" = "1" ]; then
         idle_summary="$(run_idle "hqc${level}_idle_before_cpu")"
@@ -390,12 +524,23 @@ for level in $LEVELS; do
     fi
 
     echo "[whole] === HQC-$level NPU fastest non-CT, iters=$npu_iters ==="
-    build_npu_fastest "$level" "$npu_iters"
-    npu_dir="$(deploy_npu_fastest "$level")"
+    if [ "$SKIP_BUILD" = "1" ]; then
+        npu_dir="/data/local/tmp/QDC_files/hqc_whole/hqc${level}_npu_fastest_nonct"
+    else
+        build_npu_fastest "$level" "$npu_iters"
+        npu_dir="$(deploy_npu_fastest "$level")"
+    fi
     npu_workload="cd $npu_dir && chmod +x hqc_host && export ADSP_LIBRARY_PATH=\"\$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp\" && export LD_LIBRARY_PATH=\"\$PWD:/vendor/lib64:/system/lib64:/apex/com.android.runtime/lib64/bionic\" && ./hqc_host $npu_iters"
-    npu_direct_summary="$(run_direct "hqc${level}_npu_fastest_nonct" "$npu_workload")"
-    direct_row_from_summary "$level" "NPU fastest non-CT" "$npu_direct_summary" >> "$direct_rows_file"
-    cat "$npu_direct_summary" >> "$raw_file"
+    npu_process_workload="cd $npu_dir && chmod +x hqc_host && export ADSP_LIBRARY_PATH=\"\$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp\" && export LD_LIBRARY_PATH=\"\$PWD:/vendor/lib64:/system/lib64:/apex/com.android.runtime/lib64/bionic\" && exec ./hqc_host $npu_iters"
+    if [ "$RUN_DIRECT_ENERGY" = "1" ]; then
+        npu_direct_summary="$(run_direct "hqc${level}_npu_fastest_nonct" "$npu_workload")"
+        direct_row_from_summary "$level" "NPU fastest non-CT" "$npu_direct_summary" >> "$direct_rows_file"
+        cat "$npu_direct_summary" >> "$raw_file"
+        printf '\n' >> "$raw_file"
+    fi
+    npu_process_summary="$(run_process_cpu "hqc${level}_npu_fastest_nonct" "$npu_process_workload")"
+    process_row_from_summary "$level" "NPU fastest non-CT" "$npu_process_summary" "$cpu_process_summary" >> "$process_rows_file"
+    cat "$npu_process_summary" >> "$raw_file"
     printf '\n' >> "$raw_file"
     if [ "$RUN_QPROF_CONTEXT" = "1" ]; then
         idle_summary="$(run_idle "hqc${level}_idle_before_npu")"

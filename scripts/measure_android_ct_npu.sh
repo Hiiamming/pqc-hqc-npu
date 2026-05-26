@@ -10,11 +10,16 @@ STREAMING_RATE="${STREAMING_RATE:-1000}"
 SAMPLING_RATE="${SAMPLING_RATE:-200}"
 HEXAGON_ARCH="${HEXAGON_ARCH:-v68}"
 LEVELS="${LEVELS:-128 192 256}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
+RUN_DIRECT_ENERGY="${RUN_DIRECT_ENERGY:-1}"
+RUN_QPROF_CONTEXT="${RUN_QPROF_CONTEXT:-1}"
 NPU_ITERS="${NPU_ITERS:-10000}"
 DIRECT_SAMPLE_INTERVAL="${DIRECT_SAMPLE_INTERVAL:-0.1}"
 DIRECT_IDLE_SECONDS="${DIRECT_IDLE_SECONDS:-10}"
 DIRECT_IDLE_POSITION="${DIRECT_IDLE_POSITION:-both}"
 ENERGY_REMOTE_DIR="${ENERGY_REMOTE_DIR:-/data/local/tmp/QDC_files/hqc_whole}"
+PROCESS_CPU_SAMPLE_INTERVAL="${PROCESS_CPU_SAMPLE_INTERVAL:-0.02}"
+PROCESS_CPU_BASELINE_ROOT="${PROCESS_CPU_BASELINE_ROOT:-$ROOT_DIR/results/qprof/qprof_hqc_whole_runs}"
 
 if [ ! -x "$ADB" ]; then
     echo "ERROR: ADB executable not found: $ADB" >&2
@@ -41,6 +46,12 @@ deploy_energy_script() {
     "$ADB" shell "mkdir -p '$ENERGY_REMOTE_DIR'"
     "$ADB" push "$ROOT_DIR/scripts/measure_board_energy.sh" "$ENERGY_REMOTE_DIR/measure_board_energy.sh" >/dev/null
     "$ADB" shell "chmod +x '$ENERGY_REMOTE_DIR/measure_board_energy.sh'"
+}
+
+deploy_process_cpu_script() {
+    "$ADB" shell "mkdir -p '$ENERGY_REMOTE_DIR'"
+    "$ADB" push "$ROOT_DIR/scripts/measure_process_cpu.sh" "$ENERGY_REMOTE_DIR/measure_process_cpu.sh" >/dev/null
+    "$ADB" shell "chmod +x '$ENERGY_REMOTE_DIR/measure_process_cpu.sh'"
 }
 
 build_npu_ct() {
@@ -140,6 +151,74 @@ EOF_WORKLOAD
     printf '%s\n' "$out_dir/summary.env"
 }
 
+run_process_cpu() {
+    local label="$1"
+    local workload="$2"
+    local run_id
+    run_id="$(date +%Y%m%d_%H%M%S)_${label}_process"
+    local out_dir="$OUT_ROOT/$run_id"
+    mkdir -p "$out_dir"
+    local remote_workload="$ENERGY_REMOTE_DIR/${label}.process.workload.sh"
+    local remote_out="$ENERGY_REMOTE_DIR/${label}.process_cpu"
+    local local_workload="$out_dir/process_workload.sh"
+    cat > "$local_workload" <<EOF_WORKLOAD
+#!/system/bin/sh
+set -e
+$workload
+EOF_WORKLOAD
+    "$ADB" push "$local_workload" "$remote_workload" >/dev/null
+    "$ADB" shell "chmod +x '$remote_workload'"
+    set +e
+    "$ADB" shell "cd '$ENERGY_REMOTE_DIR' && PROCESS_CPU_SAMPLE_INTERVAL='$PROCESS_CPU_SAMPLE_INTERVAL' PROCESS_CPU_TMP_DIR='$ENERGY_REMOTE_DIR' ./measure_process_cpu.sh '$label' sh '$remote_workload' > '${remote_out}.log' 2>&1"
+    local rc=$?
+    set -e
+    "$ADB" pull "${remote_out}.log" "$out_dir/process_cpu.log" >/dev/null 2>&1 || true
+    "$ADB" pull "$ENERGY_REMOTE_DIR/${label}.process_cpu.samples" "$out_dir/process_cpu.samples" >/dev/null 2>&1 || true
+    if [ "$rc" -ne 0 ]; then
+        echo "ERROR: process CPU run failed for $label, rc=$rc" >&2
+        tail -50 "$out_dir/process_cpu.log" >&2 || true
+        exit "$rc"
+    fi
+    awk -v out_dir="$out_dir" '
+        /^\[process-cpu-result\]/ {
+            for (i = 1; i <= NF; ++i) {
+                split($i, kv, "=")
+                if (kv[1] == "label") label = kv[2]
+                else if (kv[1] == "rc") workload_rc = kv[2]
+                else if (kv[1] == "result") result = kv[2]
+                else if (kv[1] == "elapsed_s") elapsed_s = kv[2]
+                else if (kv[1] == "elapsed_ms") elapsed_ms = kv[2]
+                else if (kv[1] == "total_decodes") total_decodes = kv[2]
+                else if (kv[1] == "us_per_decode") us_per_decode = kv[2]
+                else if (kv[1] == "process_cpu_s") process_cpu_s = kv[2]
+                else if (kv[1] == "process_cpu_pct") process_cpu_pct = kv[2]
+                else if (kv[1] == "cpu_ms_per_decode") cpu_ms_per_decode = kv[2]
+                else if (kv[1] == "cpu_ticks") cpu_ticks = kv[2]
+                else if (kv[1] == "clk_tck") clk_tck = kv[2]
+                else if (kv[1] == "samples") process_samples = kv[2]
+            }
+        }
+        END {
+            printf "label=%s\n", label
+            printf "mode=process\n"
+            printf "workload_rc=%s\n", workload_rc
+            printf "result=%s\n", result
+            printf "total_decodes=%s\n", total_decodes
+            printf "elapsed_s=%s\n", elapsed_s
+            printf "elapsed_ms=%s\n", elapsed_ms
+            printf "us_per_decode=%s\n", us_per_decode
+            printf "process_cpu_s=%s\n", process_cpu_s
+            printf "process_cpu_pct=%s\n", process_cpu_pct
+            printf "cpu_ms_per_decode=%s\n", cpu_ms_per_decode
+            printf "cpu_ticks=%s\n", cpu_ticks
+            printf "clk_tck=%s\n", clk_tck
+            printf "process_samples=%s\n", process_samples
+            printf "out_dir=%s\n", out_dir
+        }
+    ' "$out_dir/process_cpu.log" > "$out_dir/summary.env"
+    printf '%s\n' "$out_dir/summary.env"
+}
+
 run_idle() {
     local label="$1"
     PROFILE_TIME="$PROFILE_TIME" STREAMING_RATE="$STREAMING_RATE" SAMPLING_RATE="$SAMPLING_RATE" \
@@ -199,34 +278,84 @@ qprof_row() {
         "$level" "$rc" "$result" "$total" "$elapsed" "$us" "$cpu" "$npu" "$qclk" "$hmx" "$memnoc" "$thermal" "$out_dir"
 }
 
+latest_cpu_process_baseline() {
+    local level="$1"
+    find "$PROCESS_CPU_BASELINE_ROOT" -maxdepth 1 -type d -name "*_hqc${level}_cpu_scalar_process" -printf '%T@ %p\n' 2>/dev/null \
+        | sort -nr \
+        | awk 'NR == 1 {print $2 "/summary.env"}'
+}
+
+process_row() {
+    local level="$1"
+    local summary="$2"
+    local baseline_summary="${3:-}"
+    local result total elapsed us cpu_s cpu_pct cpu_ms reduction samples out_dir base_cpu_ms
+    result="$(read_summary "$summary" result)"
+    total="$(read_summary "$summary" total_decodes)"
+    elapsed="$(read_summary "$summary" elapsed_ms)"
+    us="$(read_summary "$summary" us_per_decode)"
+    cpu_s="$(read_summary "$summary" process_cpu_s)"
+    cpu_pct="$(read_summary "$summary" process_cpu_pct)"
+    cpu_ms="$(read_summary "$summary" cpu_ms_per_decode)"
+    samples="$(read_summary "$summary" process_samples)"
+    out_dir="$(read_summary "$summary" out_dir)"
+    reduction=""
+    if [ -n "$baseline_summary" ] && [ -f "$baseline_summary" ]; then
+        base_cpu_ms="$(read_summary "$baseline_summary" cpu_ms_per_decode)"
+        if [ -n "$base_cpu_ms" ] && [ -n "$cpu_ms" ]; then
+            reduction="$(awk -v base="$base_cpu_ms" -v cur="$cpu_ms" 'BEGIN {if (base > 0) printf "%.3f", 100.0 * (base - cur) / base}')"
+        fi
+    fi
+    printf '| HQC-%s | NPU CT | %s | %s | %s | %s | %s | %s | %s | %s | %s | `%s` |\n' \
+        "$level" "$result" "$total" "$elapsed" "$us" "$cpu_s" "$cpu_pct" "$cpu_ms" "${reduction:-}" "$samples" "$out_dir"
+}
+
 direct_rows="$OUT_ROOT/ct_direct_rows.md"
+process_rows="$OUT_ROOT/ct_process_rows.md"
 qprof_rows="$OUT_ROOT/ct_qprof_rows.md"
 raw_file="$OUT_ROOT/ct_raw_summary.env"
 : > "$direct_rows"
+: > "$process_rows"
 : > "$qprof_rows"
 : > "$raw_file"
 
 deploy_energy_script
+deploy_process_cpu_script
 
 for level in $LEVELS; do
     echo "[ct] === HQC-$level NPU CT, iters=$NPU_ITERS ==="
-    build_npu_ct "$level"
-    npu_dir="$(deploy_npu_ct "$level")"
+    if [ "$SKIP_BUILD" = "1" ]; then
+        npu_dir="/data/local/tmp/QDC_files/hqc_whole/hqc${level}_npu_ct"
+    else
+        build_npu_ct "$level"
+        npu_dir="$(deploy_npu_ct "$level")"
+    fi
     workload="cd $npu_dir && chmod +x hqc_host && export ADSP_LIBRARY_PATH=\"\$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp\" && export LD_LIBRARY_PATH=\"\$PWD:/vendor/lib64:/system/lib64:/apex/com.android.runtime/lib64/bionic\" && ./hqc_host $NPU_ITERS"
+    process_workload="cd $npu_dir && chmod +x hqc_host && export ADSP_LIBRARY_PATH=\"\$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp\" && export LD_LIBRARY_PATH=\"\$PWD:/vendor/lib64:/system/lib64:/apex/com.android.runtime/lib64/bionic\" && exec ./hqc_host $NPU_ITERS"
 
-    direct_summary="$(run_direct "hqc${level}_npu_ct" "$workload")"
-    direct_row "$level" "$direct_summary" >> "$direct_rows"
-    cat "$direct_summary" >> "$raw_file"
+    if [ "$RUN_DIRECT_ENERGY" = "1" ]; then
+        direct_summary="$(run_direct "hqc${level}_npu_ct" "$workload")"
+        direct_row "$level" "$direct_summary" >> "$direct_rows"
+        cat "$direct_summary" >> "$raw_file"
+        printf '\n' >> "$raw_file"
+    fi
+
+    process_summary="$(run_process_cpu "hqc${level}_npu_ct" "$process_workload")"
+    cpu_baseline_summary="$(latest_cpu_process_baseline "$level")"
+    process_row "$level" "$process_summary" "$cpu_baseline_summary" >> "$process_rows"
+    cat "$process_summary" >> "$raw_file"
     printf '\n' >> "$raw_file"
 
-    idle_summary="$(run_idle "hqc${level}_idle_before_npu_ct")"
-    idle_power="$(read_summary "$idle_summary" avg_power_W)"
-    qprof_summary="$(run_qprof "hqc${level}_npu_ct" "$idle_power" "$workload")"
-    qprof_row "$level" "$qprof_summary" >> "$qprof_rows"
-    cat "$idle_summary" >> "$raw_file"
-    printf '\n' >> "$raw_file"
-    cat "$qprof_summary" >> "$raw_file"
-    printf '\n' >> "$raw_file"
+    if [ "$RUN_QPROF_CONTEXT" = "1" ]; then
+        idle_summary="$(run_idle "hqc${level}_idle_before_npu_ct")"
+        idle_power="$(read_summary "$idle_summary" avg_power_W)"
+        qprof_summary="$(run_qprof "hqc${level}_npu_ct" "$idle_power" "$workload")"
+        qprof_row "$level" "$qprof_summary" >> "$qprof_rows"
+        cat "$idle_summary" >> "$raw_file"
+        printf '\n' >> "$raw_file"
+        cat "$qprof_summary" >> "$raw_file"
+        printf '\n' >> "$raw_file"
+    fi
 done
 
 cat >> "$RESULT_MD" <<EOF_RESULT
@@ -246,6 +375,14 @@ These qprof rows are diagnostic only; qprof perturbs power and clock state, so d
 | HQC | Backend | profile rc | Result | Total decodes | elapsed ms | us/decode | CPU load avg % | NPU util avg % | QDSP clk MHz | HMX util avg % | MemNoc MHz | Thermal max C | Raw dir |
 | --- | --- | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
 $(cat "$qprof_rows")
+
+## CT NPU Process CPU Offload Results
+
+These rows measure CPU time consumed by the NPU host process itself. Reduction uses the latest CPU scalar process baseline from \`$PROCESS_CPU_BASELINE_ROOT\` when available.
+
+| HQC | Backend | Result | Total decodes | elapsed ms | us/decode | process CPU s | process CPU % | CPU ms/decode | Reduction vs CPU % | samples | Raw dir |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+$(cat "$process_rows")
 
 ### CT Raw Summary Files
 

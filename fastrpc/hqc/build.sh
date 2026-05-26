@@ -74,6 +74,10 @@ case "$HEXAGON_ARCH" in
         ;;
 esac
 echo "=== Building HQC-$HQC_PARAM_LEVEL cDSP HVX intrinsic skel, arch=$HEXAGON_ARCH ==="
+common_sources=()
+if [ -f "$PROJECT_DIR/src/common/fft.c" ]; then
+    common_sources+=("$PROJECT_DIR/src/common/fft.c")
+fi
 "$HEXAGON_CLANG" -O2 -fPIC -shared \
     "$HEXAGON_ARCH_FLAG" \
     -mhvx -mhvx-length=128B \
@@ -95,7 +99,7 @@ echo "=== Building HQC-$HQC_PARAM_LEVEL cDSP HVX intrinsic skel, arch=$HEXAGON_A
     "$GEN_DIR/hqc_skel.c" \
     "$SCRIPT_DIR/dsp/hqc_dsp.c" \
     "$PROJECT_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" \
-    "$PROJECT_DIR/src/common/fft.c" \
+    "${common_sources[@]}" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \
     "$PROJECT_DIR/src/ref/reed_solomon.c" \

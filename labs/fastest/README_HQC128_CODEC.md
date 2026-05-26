@@ -241,17 +241,9 @@ This is not a new decoder; it is the same branchy BM with less useless work.
 
 Why not inversionless BM from `git/wu2015.pdf`? Wu 2015 is useful conceptually because it discusses inversionless BM, dynamic stopping, and error evaluation using locator/auxiliary polynomials. But in this lab's fastest mode, `HQC_GF_LUT_MUL=1` makes inversion cheap. Switching to inversionless BM would avoid inversions but introduce more polynomial scaling/update work. For `PARAM_DELTA = 15`, that tradeoff looked weak, so the implemented pass kept branchy BM and optimized actual work bounds.
 
-### 5. RS Roots: Additive FFT to Shortened Chien to HVX Chien
+### 5. RS Roots: Shortened Chien to HVX Chien
 
-The scalar baseline uses additive FFT root finding. The intrinsic lab keeps that path behind:
-
-```text
-HQC_RS_ROOTS_FFT=1
-```
-
-as a reference/differential option.
-
-The default intrinsic path changed root finding to shortened-support Chien search. Instead of evaluating the locator over all 256 field elements, it checks only the public shortened RS support:
+The intrinsic path uses shortened-support Chien search for root finding. Instead of evaluating the locator over all 256 field elements, it checks only the public shortened RS support:
 
 ```math
 x_i = \alpha^{-i}, \quad i = 0,\dots,45
@@ -556,9 +548,9 @@ Why it is better: `PARAM_DELTA = 15` is small, but BM is on the hot RS path and 
 
 Paper connection: `git/wu2015.pdf` discusses inversionless BM, dynamic stopping, and error-evaluation variants. After testing in this repo, full inversionless BM was not chosen because with `HQC_GF_LUT_MUL=1`, inversion is cheap; switching to inversionless risks adding more polynomial scaling/update work. The useful idea was doing work according to the actual locator/auxiliary degree, which was applied to BM update and later stages.
 
-### H. RS Root Finding: Replace Full-Field/Additive FFT With Shortened HVX Chien
+### H. RS Root Finding: Use Shortened HVX Chien
 
-**Code location:** `src/ref/reed_solomon.c`, functions `compute_roots()`, `compute_roots_hvx()`, and table `rs_support_powers[][]`. Select with `HQC_RS_ROOTS_HVX=1`; the additive FFT reference is behind `HQC_RS_ROOTS_FFT=1`.
+**Code location:** `src/ref/reed_solomon.c`, functions `compute_roots()`, `compute_roots_hvx()`, and table `rs_support_powers[][]`.
 
 The decoder needs error positions by finding roots of the locator:
 
@@ -566,7 +558,7 @@ The decoder needs error positions by finding roots of the locator:
 \sigma(x_i)=0
 ```
 
-The scalar baseline had an additive FFT root finder. That is reasonable when searching a large/full field. But HQC-128 RS here is a shortened code with only 46 support positions:
+HQC-128 RS here is a shortened code with only 46 support positions:
 
 ```math
 x_i=\alpha^{-i},\quad i=0,\dots,45
@@ -655,7 +647,6 @@ Why it is better: this is not a runtime optimization directly; it is workflow op
 | `HQC_USE_HVX_INTRINSICS` | set by Hexagon scripts | Hexagon | Enable HVX code blocks |
 | `HQC_USE_GF_HWSTYLE_MUL` | `1` unless GF LUT is enabled | default intrinsic | Fixed-flow `xtime`/xor GF multiply |
 | `HQC_HVX_RS_SYNDROME` | `1` | default intrinsic | Use HVX syndrome computation |
-| `HQC_RS_ROOTS_FFT` | `0` | reference option | Use the original additive-FFT root finder |
 | `HQC_RS_FAST_NON_CT` | `0` | benchmark-only | Branchy RS BM/error-value fast mode |
 | `HQC_GF_LUT_MUL` | `0` | benchmark-only | Full GF(256) multiplication table and LUT inverse |
 | `HQC_RM_EXPAND_LUT` | `0` | benchmark-only | RM 3-nibble expansion/sum LUT |

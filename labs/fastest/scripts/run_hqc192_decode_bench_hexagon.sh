@@ -61,7 +61,6 @@ echo "=== Compiling HQC-192 decode benchmark for Hexagon fastest HVX/HMX path, i
     -o "$OUT" \
     "$PROJECT_DIR/demos/hqc192_decode_bench.c" \
     "$PROJECT_DIR/fixtures/hqc192_decode_fixture.c" \
-    "$PROJECT_DIR/src/common/fft.c" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \
     "$PROJECT_DIR/src/ref/reed_solomon.c"

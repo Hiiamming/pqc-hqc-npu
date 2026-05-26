@@ -25,7 +25,7 @@
 #define PARAM_GF_MUL_ORDER          255         ///< Size of the multiplicative group of GF(2^PARAM_M)
 #define PARAM_K                     16          ///< Reed-Solomon message length in bytes
 #define PARAM_G                     31          ///< Reed-Solomon generator polynomial size
-#define PARAM_FFT                   4           ///< Exponent for additive FFT (2^PARAM_FFT points)
+#define PARAM_SIGMA_SIZE_LOG       4           ///< Legacy locator buffer exponent (2^PARAM_SIGMA_SIZE_LOG coefficients)
 
 #define RS_POLY_COEFS                                                                                                \
 	    89,  69, 153, 116, 176, 117, 111, 75,  73, 233, 242, 233, 65,  210, 21,  139, 103, 173, 67,  118,                   \

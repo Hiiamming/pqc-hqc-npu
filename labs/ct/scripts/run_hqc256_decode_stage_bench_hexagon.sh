@@ -63,7 +63,6 @@ echo "=== Compiling HQC-256 stage benchmark for Hexagon CT intrinsic path, stage
     -o "$OUT" \
     "$PROJECT_DIR/demos/hqc256_decode_stage_bench.c" \
     "$PROJECT_DIR/fixtures/hqc256_decode_fixture.c" \
-    "$PROJECT_DIR/src/common/fft.c" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \
     "$PROJECT_DIR/src/ref/reed_solomon.c"

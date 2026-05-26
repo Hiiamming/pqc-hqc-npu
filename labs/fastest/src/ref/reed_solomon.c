@@ -294,7 +294,7 @@ static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
  * positions in one HVX vector.
  *
  * @param[out] error Array of 2^PARAM_M elements receiving the error polynomial
- * @param[in] sigma Array of 2^PARAM_FFT elements storing the error locator polynomial
+ * @param[in] sigma Array of 2^PARAM_SIGMA_SIZE_LOG elements storing the error locator polynomial
  */
 static void compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree) {
     compute_roots_hvx(error, sigma, degree);
@@ -374,7 +374,7 @@ static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t de
  * See @cite lin1983error (Chapter 6 - BCH Codes) for more details.
  *
  * @param[out] z Array of PARAM_DELTA + 1 elements receiving the polynomial z(x)
- * @param[in] sigma Array of 2^PARAM_FFT elements storing the error locator polynomial
+ * @param[in] sigma Array of 2^PARAM_SIGMA_SIZE_LOG elements storing the error locator polynomial
  * @param[in] degree Integer that is the degree of polynomial sigma
  * @param[in] syndromes Array of 2 * PARAM_DELTA storing the syndromes
  */
@@ -483,7 +483,7 @@ static void correct_errors(uint8_t *cdw, const uint16_t *error_values) {
 void reed_solomon_decode(uint64_t *msg, uint64_t *cdw) {
     uint8_t cdw_bytes[PARAM_N1] = {0};
     uint16_t syndromes[2 * PARAM_DELTA] = {0};
-    uint16_t sigma[1 << PARAM_FFT] = {0};
+    uint16_t sigma[1 << PARAM_SIGMA_SIZE_LOG] = {0};
     uint8_t error[1 << PARAM_M] = {0};
     uint16_t z[PARAM_N1] = {0};
     uint16_t error_values[PARAM_N1] = {0};
@@ -496,8 +496,8 @@ void reed_solomon_decode(uint64_t *msg, uint64_t *cdw) {
     compute_syndromes(syndromes, cdw_bytes);
 
     // Compute the error locator polynomial sigma
-    // Sigma's degree is at most PARAM_DELTA. The larger buffer is kept for
-    // compatibility with the optional additive-FFT root finder.
+    // Sigma's degree is at most PARAM_DELTA. The larger buffer keeps the
+    // legacy HQC locator storage shape used by the substage benches.
     deg = compute_elp(sigma, syndromes);
 
     // Compute the error polynomial error
@@ -526,7 +526,7 @@ void reed_solomon_decode(uint64_t *msg, uint64_t *cdw) {
         printf("%u", sigma[0]);
         first_coeff = false;
     }
-    for (size_t i = 1; i < (1 << PARAM_FFT); ++i) {
+    for (size_t i = 1; i < (1 << PARAM_SIGMA_SIZE_LOG); ++i) {
         if (sigma[i] == 0)
             continue;
         if (!first_coeff)

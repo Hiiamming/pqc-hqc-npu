@@ -72,7 +72,7 @@ int main(void) {
 
     uint8_t rs_cdw_ref[HQC192_FIXTURE_COUNT][PARAM_N1] = {{0}};
     uint16_t rs_syndromes_ref[HQC192_FIXTURE_COUNT][2 * PARAM_DELTA] = {{0}};
-    uint16_t rs_sigma_ref[HQC192_FIXTURE_COUNT][1 << PARAM_FFT] = {{0}};
+    uint16_t rs_sigma_ref[HQC192_FIXTURE_COUNT][1 << PARAM_SIGMA_SIZE_LOG] = {{0}};
     uint8_t rs_error_ref[HQC192_FIXTURE_COUNT][1 << PARAM_M] = {{0}};
     uint16_t rs_z_ref[HQC192_FIXTURE_COUNT][PARAM_N1] = {{0}};
     uint16_t rs_error_values_ref[HQC192_FIXTURE_COUNT][PARAM_N1] = {{0}};
@@ -150,7 +150,7 @@ int main(void) {
                     break;
                 }
                 case 5: {
-                    uint16_t sigma[1 << PARAM_FFT] = {0};
+                    uint16_t sigma[1 << PARAM_SIGMA_SIZE_LOG] = {0};
                     uint16_t degree = hqc_rs_bench_compute_elp(sigma, rs_syndromes_ref[fixture]);
                     checksum ^= degree ^ sigma[0] ^ ((uint32_t)sigma[PARAM_DELTA] << 16);
                     ++total_ops;
@@ -158,7 +158,7 @@ int main(void) {
                 }
                 case 6: {
                     uint8_t error[1 << PARAM_M] = {0};
-                    uint16_t sigma[1 << PARAM_FFT] = {0};
+                    uint16_t sigma[1 << PARAM_SIGMA_SIZE_LOG] = {0};
                     memcpy(sigma, rs_sigma_ref[fixture], sizeof(sigma));
                     hqc_rs_bench_compute_roots(error, sigma, rs_degree_ref[fixture]);
                     checksum ^= error[0] ^ ((uint32_t)error[PARAM_N1 - 1] << 16);
