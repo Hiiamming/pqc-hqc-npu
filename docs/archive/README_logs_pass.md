@@ -186,7 +186,7 @@ Qualcomm Profiler
 
 - `hqc_lab_scalar/`: portable scalar C baseline. Its Hexagon decode benchmark intentionally builds without `-mhvx`.
 - `hqc_lab_insintric/`: Hexagon HVX intrinsic variant. The folder name keeps the spelling requested in the task.
-- Each lab has three parameter-set folders under `src/ref/`: `hqc-1/` (= HQC-128), `hqc-192/`, `hqc-256/`. Build scripts pick the right one via `-I src/ref/hqc-<set>`, so `parameters.h` and the RS `alpha_ij_pow` precomputed table resolve to the active variant. The shared sources in `src/ref/` (`gf.c`, `reed_muller.c`, `reed_solomon.c`) and `src/common/` (`fft.c`, `code.c`) are written against `PARAM_N1`, `PARAM_N2`, `PARAM_DELTA`, `PARAM_K`, `PARAM_G`, `PARAM_FFT`, `PARAM_M` and so are reused unchanged for all three security levels.
+- Each lab has three parameter-set folders under `src/ref/`: `hqc-1/` (= HQC-128), `hqc-3/`, `hqc-5/`. Build scripts pick the right one via `-I src/ref/hqc-<set>`, so `parameters.h` and the RS `alpha_ij_pow` precomputed table resolve to the active variant. The shared sources in `src/ref/` (`gf.c`, `reed_muller.c`, `reed_solomon.c`) and `src/common/` (`fft.c`, `code.c`) are written against `PARAM_N1`, `PARAM_N2`, `PARAM_DELTA`, `PARAM_K`, `PARAM_G`, `PARAM_FFT`, `PARAM_M` and so are reused unchanged for all three security levels.
 - Each lab generates an independent 16-fixture corpus per set: `fixtures/hqc{128,192,256}_decode_fixture.c`, produced by `tools/gen_hqc{128,192,256}_decode_fixture.c` via the matching `scripts/gen_hqc{128,192,256}_decode_fixture.sh`. Run scripts auto-invoke the generator if the `.c` is missing.
 
 ## Run commands

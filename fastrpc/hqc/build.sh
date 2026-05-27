@@ -29,12 +29,12 @@ case "$HQC_PARAM_LEVEL" in
         DEFAULT_ITERS_DEFINE="-DHQC_DEFAULT_BENCH_ITERS=1000"
         ;;
     192)
-        PARAM_DIR="hqc-192"
+        PARAM_DIR="hqc-3"
         FIXTURE_PREFIX="hqc192"
         DEFAULT_ITERS_DEFINE="-DHQC_DEFAULT_BENCH_ITERS=100"
         ;;
     256)
-        PARAM_DIR="hqc-256"
+        PARAM_DIR="hqc-5"
         FIXTURE_PREFIX="hqc256"
         DEFAULT_ITERS_DEFINE="-DHQC_DEFAULT_BENCH_ITERS=50"
         ;;

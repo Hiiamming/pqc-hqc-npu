@@ -18,12 +18,12 @@ case "$HQC_PARAM_LEVEL" in
         BENCH_ITERS="${HQC128_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     192)
-        PARAM_DIR="hqc-192"
+        PARAM_DIR="hqc-3"
         FIXTURE_PREFIX="hqc192"
         BENCH_ITERS="${HQC192_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     256)
-        PARAM_DIR="hqc-256"
+        PARAM_DIR="hqc-5"
         FIXTURE_PREFIX="hqc256"
         BENCH_ITERS="${HQC256_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;

@@ -11,7 +11,7 @@ mkdir -p "$(dirname "$OUT")" "$(dirname "$FIXTURE")"
 gcc -std=c11 -O2 -Wall -Wextra \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
-    -I "$PROJECT_DIR/src/ref/hqc-256" \
+    -I "$PROJECT_DIR/src/ref/hqc-5" \
     "$PROJECT_DIR/tools/gen_hqc256_decode_fixture.c" \
     "$PROJECT_DIR/src/common/code.c" \
     "$PROJECT_DIR/src/common/fft.c" \

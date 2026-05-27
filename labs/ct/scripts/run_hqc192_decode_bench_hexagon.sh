@@ -51,7 +51,7 @@ echo "=== Compiling HQC-192 decode benchmark for Hexagon CT intrinsic path, iter
     -I "$PROJECT_DIR/fixtures" \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
-    -I "$PROJECT_DIR/src/ref/hqc-192" \
+    -I "$PROJECT_DIR/src/ref/hqc-3" \
     -I "$H2_INSTALL/include" \
     -I "$H2_KERNEL" \
     -moslib=h2 \

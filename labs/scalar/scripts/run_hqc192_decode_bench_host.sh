@@ -15,7 +15,7 @@ gcc -std=c11 -O2 -Wall -Wextra -ffunction-sections -fdata-sections \
     -I "$PROJECT_DIR/fixtures" \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
-    -I "$PROJECT_DIR/src/ref/hqc-192" \
+    -I "$PROJECT_DIR/src/ref/hqc-3" \
     "$PROJECT_DIR/demos/hqc192_decode_bench.c" \
     "$PROJECT_DIR/fixtures/hqc192_decode_fixture.c" \
     "$PROJECT_DIR/src/common/fft.c" \

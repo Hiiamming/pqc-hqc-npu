@@ -54,7 +54,7 @@ echo "=== Compiling HQC-256 substage benchmark for Hexagon fastest HVX/HMX path,
     -I "$PROJECT_DIR/fixtures" \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
-    -I "$PROJECT_DIR/src/ref/hqc-256" \
+    -I "$PROJECT_DIR/src/ref/hqc-5" \
     -I "$H2_INSTALL/include" \
     -I "$H2_KERNEL" \
     -moslib=h2 \
