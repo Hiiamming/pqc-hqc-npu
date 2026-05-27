@@ -25,22 +25,22 @@ The decode benchmark keeps encode out of the measured Hexagon binary. Generate
 the corrupt HQC-128 codeword fixture on the host:
 
 ```sh
-bash scripts/gen_hqc128_decode_fixture.sh
+bash scripts/gen_hqc1_decode_fixture.sh
 ```
 
 Then run the host decode-only benchmark:
 
 ```sh
-bash scripts/run_hqc128_decode_bench_host.sh
+bash scripts/run_hqc1_decode_bench_host.sh
 ```
 
 Or build and run the same decode-only scalar benchmark on Hexagon:
 
 ```sh
-bash scripts/run_hqc128_decode_bench_hexagon.sh
+bash scripts/run_hqc1_decode_bench_hexagon.sh
 ```
 
-`demos/hqc128_decode_bench.c` links the generated fixture plus decode
+`demos/hqc1_decode_bench.c` links the generated fixture plus decode
 dependencies only: `fft.c`, `gf.c`, `reed_muller.c`, and `reed_solomon.c`.
 It intentionally does not link `src/common/code.c`. The benchmark scripts also
 compile with function/data sections and linker garbage collection, so unused

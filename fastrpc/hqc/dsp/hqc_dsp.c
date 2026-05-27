@@ -11,23 +11,23 @@
 #endif
 
 #if HQC_PARAM_LEVEL == 128
-#include "hqc128_decode_fixture.h"
-#define HQC_FIXTURE_COUNT HQC128_FIXTURE_COUNT
-#define HQC_FIXTURE_CODEWORDS hqc128_fixture_codewords
-#define HQC_FIXTURE_EXPECTED_MESSAGES hqc128_fixture_expected_messages
-#define HQC_FIXTURE_RS_SYMBOL_ERRORS hqc128_fixture_rs_symbol_errors
+#include "hqc1_decode_fixture.h"
+#define HQC_FIXTURE_COUNT HQC1_FIXTURE_COUNT
+#define HQC_FIXTURE_CODEWORDS hqc1_fixture_codewords
+#define HQC_FIXTURE_EXPECTED_MESSAGES hqc1_fixture_expected_messages
+#define HQC_FIXTURE_RS_SYMBOL_ERRORS hqc1_fixture_rs_symbol_errors
 #elif HQC_PARAM_LEVEL == 192
-#include "hqc192_decode_fixture.h"
-#define HQC_FIXTURE_COUNT HQC192_FIXTURE_COUNT
-#define HQC_FIXTURE_CODEWORDS hqc192_fixture_codewords
-#define HQC_FIXTURE_EXPECTED_MESSAGES hqc192_fixture_expected_messages
-#define HQC_FIXTURE_RS_SYMBOL_ERRORS hqc192_fixture_rs_symbol_errors
+#include "hqc3_decode_fixture.h"
+#define HQC_FIXTURE_COUNT HQC3_FIXTURE_COUNT
+#define HQC_FIXTURE_CODEWORDS hqc3_fixture_codewords
+#define HQC_FIXTURE_EXPECTED_MESSAGES hqc3_fixture_expected_messages
+#define HQC_FIXTURE_RS_SYMBOL_ERRORS hqc3_fixture_rs_symbol_errors
 #elif HQC_PARAM_LEVEL == 256
-#include "hqc256_decode_fixture.h"
-#define HQC_FIXTURE_COUNT HQC256_FIXTURE_COUNT
-#define HQC_FIXTURE_CODEWORDS hqc256_fixture_codewords
-#define HQC_FIXTURE_EXPECTED_MESSAGES hqc256_fixture_expected_messages
-#define HQC_FIXTURE_RS_SYMBOL_ERRORS hqc256_fixture_rs_symbol_errors
+#include "hqc5_decode_fixture.h"
+#define HQC_FIXTURE_COUNT HQC5_FIXTURE_COUNT
+#define HQC_FIXTURE_CODEWORDS hqc5_fixture_codewords
+#define HQC_FIXTURE_EXPECTED_MESSAGES hqc5_fixture_expected_messages
+#define HQC_FIXTURE_RS_SYMBOL_ERRORS hqc5_fixture_rs_symbol_errors
 #else
 #error "HQC_PARAM_LEVEL must be 128, 192, or 256"
 #endif

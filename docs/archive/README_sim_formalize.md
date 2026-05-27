@@ -191,7 +191,7 @@ intrinsic_fastest_non_ct,rs_correct,438.6,439,0.6
 ## Notes
 
 - `intrinsic_fastest_non_ct` is benchmark-only. It uses side-channel-relaxed RS control flow and data-dependent GF/RM lookup tables.
-- Current `hqc_lab_insintric` scripts run the fastest path by default now; use `HQC128_BENCH_ITERS=10 ./hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh` instead of passing the old fastest env flags.
+- Current `hqc_lab_insintric` scripts run the fastest path by default now; use `HQC1_BENCH_ITERS=10 ./hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh` instead of passing the old fastest env flags.
 - Scalar substage support is benchmark-only and was added to measure the same RM/RS stages as the intrinsic benchmark.
 - The intrinsic Reed-Muller code was refactored before these measurements. Post-refactor full-decode checks showed no meaningful performance loss: default CT measured 252,490 Pcycles/decode and fastest non-CT measured 58,605 Pcycles/decode.
 

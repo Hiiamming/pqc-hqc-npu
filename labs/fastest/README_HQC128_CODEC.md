@@ -5,13 +5,13 @@ This document is the handoff note for `hqc_lab_insintric`. It explains what chan
 Short version: `hqc_lab_scalar` remains the scalar correctness baseline. `hqc_lab_insintric` moves the HQC-128 concatenated decoder toward Hexagon HVX and adds several side-channel-relaxed fast paths for benchmarking. The fastest measured configuration at the end of pass 12 is:
 
 ```sh
-HQC128_BENCH_ITERS=10 \
+HQC1_BENCH_ITERS=10 \
 HQC_RS_FAST_NON_CT=1 \
 HQC_GF_LUT_MUL=1 \
 HQC_RM_EXPAND_LUT=1 \
 HQC_RM_FUSED_FAST=1 \
 HQC_RS_ROOTS_HVX=1 \
-bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh
+bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh
 ```
 
 Measured on the 16-fixture corpus:
@@ -36,7 +36,7 @@ This fastest configuration is benchmark-only. It intentionally uses branchy RS l
 | 1 | Split scalar and intrinsic labs; add HVX RM Hadamard and peak reduction. | `reed_muller.c`: `hadamard_hvx`, `find_peaks_hvx` |
 | 2 | Remove scalar even/odd gather from the HVX Hadamard transform. | `hadamard_hvx` uses HVX deal/deinterleave |
 | 3 | Preserve the scalar RM peak tie-break exactly in vector logic. | `find_peaks_hvx` uses index vectors and `vmin` |
-| 4 | Add HVX RM expansion/summation and stage benchmark support. | `expand_and_sum_hvx`; `hqc128_decode_stage_bench.c` |
+| 4 | Add HVX RM expansion/summation and stage benchmark support. | `expand_and_sum_hvx`; `hqc1_decode_stage_bench.c` |
 | 5 | Replace default GF multiply with fixed-flow hardware-style `xtime`/xor and keep a GF LUT experiment. | `gf.c`: `gf_mul_hwstyle`, `HQC_GF_LUT_MUL` |
 | 6 | Vectorize RS syndrome computation with HVX. | `compute_syndromes_hvx` |
 | 7 | Target RS/RM bottlenecks: packed RM expand, shortened Chien roots, branchy fast RS experiments. | `compute_elp`, `compute_roots`, `compute_error_values` |
@@ -59,13 +59,13 @@ Important files in `hqc_lab_insintric`:
 | `src/ref/gf.c` | GF(2^8) arithmetic, fixed-flow hardware-style multiply, optional full GF table multiply/inverse |
 | `src/ref/hqc-1/reed_solomon.h` | RS public prototypes plus substage benchmark hooks |
 | `src/ref/hqc-1/parameters.h` | Minimal HQC-128 codec parameters, including `PARAM_N1 = 46`, `PARAM_DELTA = 15`, `PARAM_M = 8` |
-| `demos/hqc128_decode_bench.c` | Full decode benchmark over the generated 16-fixture corpus |
-| `demos/hqc128_decode_stage_bench.c` | Coarse RM-vs-RS benchmark |
-| `demos/hqc128_decode_substage_bench.c` | Fine-grained RM/RS substage benchmark |
-| `scripts/run_hqc128_decode_bench_hexagon.sh` | Full Hexagon decode benchmark and feature flags |
-| `scripts/run_hqc128_decode_substage_bench_hexagon.sh` | Substage Hexagon benchmark and feature flags |
-| `scripts/run_hqc128_decode_bench_host.sh` | Host correctness/benchmark build for default and fast modes |
-| `fixtures/hqc128_decode_fixture.*` | Generated 16-case deterministic decode corpus |
+| `demos/hqc1_decode_bench.c` | Full decode benchmark over the generated 16-fixture corpus |
+| `demos/hqc1_decode_stage_bench.c` | Coarse RM-vs-RS benchmark |
+| `demos/hqc1_decode_substage_bench.c` | Fine-grained RM/RS substage benchmark |
+| `scripts/run_hqc1_decode_bench_hexagon.sh` | Full Hexagon decode benchmark and feature flags |
+| `scripts/run_hqc1_decode_substage_bench_hexagon.sh` | Substage Hexagon benchmark and feature flags |
+| `scripts/run_hqc1_decode_bench_host.sh` | Host correctness/benchmark build for default and fast modes |
+| `fixtures/hqc1_decode_fixture.*` | Generated 16-case deterministic decode corpus |
 
 ## What Changed From `hqc_lab_scalar`
 
@@ -327,8 +327,8 @@ This follows the same derivative/odd-locator observation used in Reed-Solomon er
 The scalar lab originally used narrower testing. The intrinsic lab now has a generated 16-case decode fixture corpus:
 
 ```text
-fixtures/hqc128_decode_fixture.c
-fixtures/hqc128_decode_fixture.h
+fixtures/hqc1_decode_fixture.c
+fixtures/hqc1_decode_fixture.h
 ```
 
 The corpus covers deterministic random messages and RS-symbol error counts from 0 through `PARAM_DELTA`. Every full decode benchmark decodes all 16 fixtures per iteration.
@@ -336,9 +336,9 @@ The corpus covers deterministic random messages and RS-symbol error counts from 
 The important benchmark entry points are:
 
 ```sh
-bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_host.sh
-bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh
-bash hqc_lab_insintric/scripts/run_hqc128_decode_substage_bench_hexagon.sh
+bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_host.sh
+bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh
+bash hqc_lab_insintric/scripts/run_hqc1_decode_substage_bench_hexagon.sh
 ```
 
 The substage benchmark is compiled with:
@@ -619,7 +619,7 @@ Units are estimated Pcycles/decode from the substage benchmark. The tradeoff rem
 
 ### J. Benchmark Wrappers: Measure the Right Stage
 
-**Code location:** `demos/hqc128_decode_bench.c`, `demos/hqc128_decode_stage_bench.c`, `demos/hqc128_decode_substage_bench.c`, and wrappers at the end of `src/ref/reed_solomon.c` under `HQC_ENABLE_SUBSTAGE_BENCH`.
+**Code location:** `demos/hqc1_decode_bench.c`, `demos/hqc1_decode_stage_bench.c`, `demos/hqc1_decode_substage_bench.c`, and wrappers at the end of `src/ref/reed_solomon.c` under `HQC_ENABLE_SUBSTAGE_BENCH`.
 
 Optimization in this project used the loop:
 
@@ -686,11 +686,11 @@ The following local documents informed the work:
 Correctness checks used:
 
 ```sh
-bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_host.sh
+bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_host.sh
 HQC_RS_FAST_NON_CT=1 HQC_GF_LUT_MUL=1 HQC_RM_EXPAND_LUT=1 \
-  bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_host.sh
-HQC128_BENCH_ITERS=1 \
-  bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh
+  bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_host.sh
+HQC1_BENCH_ITERS=1 \
+  bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh
 ```
 
 Each pass also used targeted Hexagon 1-iter/10-iter full and substage runs as needed.

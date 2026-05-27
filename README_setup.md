@@ -347,8 +347,8 @@ HQC_RS_ROOTS_HVX=1
 For a single ad-hoc measurement around an already deployed workload, use:
 
 ```sh
-PROFILE_TIME=30 IDLE_POWER_W=0.70 scripts/measure_qprof.sh npu1 hqc128_npu \
-  'cd /data/local/tmp/QDC_files/hqc_whole/hqc128_npu_fastest_nonct && ./hqc_host 10000'
+PROFILE_TIME=30 IDLE_POWER_W=0.70 scripts/measure_qprof.sh npu1 hqc1_npu \
+  'cd /data/local/tmp/QDC_files/hqc_whole/hqc1_npu_fastest_nonct && ./hqc_host 10000'
 ```
 
 ## 11. Host qprof.exe Caveat

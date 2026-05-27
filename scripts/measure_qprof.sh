@@ -29,7 +29,7 @@ Examples:
   PROFILE_TIME=30 scripts/measure_qprof.sh idle hdk8550_idle
 
   PROFILE_TIME=30 IDLE_POWER_W=0.70 scripts/measure_qprof.sh cpu hdk8550_cpu \
-    'cd /data/local/tmp/QDC_files/hdk8550_cpu && ./hqc128_decode_bench_arm64_static'
+    'cd /data/local/tmp/QDC_files/hdk8550_cpu && ./hqc1_decode_bench_arm64_static'
 
   PROFILE_TIME=30 IDLE_POWER_W=0.70 scripts/measure_qprof.sh npu1 hdk8550_npu1 \
     'cd /data/local/tmp/QDC_files/hdk8550_npu && ./hqc_npu_decoder 10000'

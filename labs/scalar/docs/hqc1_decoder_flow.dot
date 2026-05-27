@@ -1,0 +1,236 @@
+digraph HQC1DecoderFlow {
+  graph [
+    rankdir=TB,
+    bgcolor="white",
+    pad=0.25,
+    nodesep=0.42,
+    ranksep=0.55,
+    splines=polyline,
+    fontname="DejaVu Sans",
+    label=<
+      <TABLE BORDER="0" CELLBORDER="0" CELLPADDING="2">
+        <TR><TD><FONT POINT-SIZE="24"><B>HQC-128 decoder flow in hqc_lab_scalar</B></FONT></TD></TR>
+        <TR><TD><FONT POINT-SIZE="12">code_decode(): Reed-Muller duplicated RM(1,7) -&gt; shortened Reed-Solomon RS-S1 over GF(2^8)</FONT></TD></TR>
+      </TABLE>
+    >,
+    labelloc=t
+  ];
+
+  node [
+    shape=plain,
+    fontname="DejaVu Sans"
+  ];
+
+  edge [
+    color="#334155",
+    arrowsize=0.8,
+    penwidth=1.5,
+    fontname="DejaVu Sans",
+    fontsize=10
+  ];
+
+  input [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" COLOR="#0f172a">
+        <TR><TD BGCOLOR="#dbeafe"><FONT POINT-SIZE="16"><B>Input to C.Decode</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT"><B>w / em</B>: uint64_t[VEC_N1N2_SIZE_64]</TD></TR>
+        <TR><TD ALIGN="LEFT">17664 bit = 46 x 384 bit</TD></TR>
+        <TR><TD ALIGN="LEFT">2208 byte = 276 x uint64_t</TD></TR>
+        <TR><TD ALIGN="LEFT">From HQC decrypt: v XOR Truncate(u*y)</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  layout [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#64748b">
+        <TR><TD BGCOLOR="#f1f5f9"><FONT POINT-SIZE="15"><B>RM input layout</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT">codeArray = (rm_codeword_t *) cdw</TD></TR>
+        <TR><TD ALIGN="LEFT">rm_codeword_t = 128 bit = u32[4] = u8[16]</TD></TR>
+        <TR><TD ALIGN="LEFT">For RS symbol i = 0..45:</TD></TR>
+        <TR><TD ALIGN="LEFT">W_i = codeArray[3*i + 0..2]</TD></TR>
+        <TR><TD ALIGN="LEFT">W_i = W_i^(0) || W_i^(1) || W_i^(2)</TD></TR>
+        <TR><TD ALIGN="LEFT">Each W_i^(j) is 128 bit RM(1,7)</TD></TR>
+        <TR><TD ALIGN="LEFT">bit t = 32*part + bit, from u32[part] &gt;&gt; bit</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  subgraph cluster_rm {
+    label="Reed-Muller decoder: reed_muller_decode(tmp, em)";
+    color="#2563eb";
+    penwidth=2;
+    style="rounded";
+    fontsize=15;
+    fontname="DejaVu Sans";
+
+    rm_loop [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#2563eb">
+          <TR><TD BGCOLOR="#bfdbfe"><FONT POINT-SIZE="15"><B>Loop over 46 RS symbols</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">for i = 0..45</TD></TR>
+          <TR><TD ALIGN="LEFT">Read 3 consecutive RM copies</TD></TR>
+          <TR><TD ALIGN="LEFT">Input per iteration: 128 x 3 = 384 bit</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    expand [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#2563eb">
+          <TR><TD BGCOLOR="#e0f2fe"><FONT POINT-SIZE="15"><B>expand_and_sum()</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">S[t] = W_i^(0)[t] + W_i^(1)[t] + W_i^(2)[t]</TD></TR>
+          <TR><TD ALIGN="LEFT">t = 0..127</TD></TR>
+          <TR><TD ALIGN="LEFT">Output: int16_t expanded[128]</TD></TR>
+          <TR><TD ALIGN="LEFT">Each value is 0..3</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    hadamard [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#2563eb">
+          <TR><TD BGCOLOR="#e0f2fe"><FONT POINT-SIZE="15"><B>hadamard()</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">Fast Hadamard Transform, 128 points</TD></TR>
+          <TR><TD ALIGN="LEFT">7 passes of pair operation:</TD></TR>
+          <TR><TD ALIGN="LEFT">(x, y) -&gt; (x + y, x - y)</TD></TR>
+          <TR><TD ALIGN="LEFT">Output: int16_t transform[128]</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    correct [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#2563eb">
+          <TR><TD BGCOLOR="#e0f2fe"><FONT POINT-SIZE="15"><B>bias correction</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">transform[0] -= 64 * MULTIPLICITY</TD></TR>
+          <TR><TD ALIGN="LEFT">HQC-128: MULTIPLICITY = 3</TD></TR>
+          <TR><TD ALIGN="LEFT">so transform[0] -= 192</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    peak [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#2563eb">
+          <TR><TD BGCOLOR="#e0f2fe"><FONT POINT-SIZE="15"><B>find_peaks()</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">p = argmax |transform[p]|, p in 0..127</TD></TR>
+          <TR><TD ALIGN="LEFT">Output byte a_i:</TD></TR>
+          <TR><TD ALIGN="LEFT">low 7 bits = p</TD></TR>
+          <TR><TD ALIGN="LEFT">bit 7 = 1 if transform[p] &gt; 0</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    rm_out [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#2563eb">
+          <TR><TD BGCOLOR="#bfdbfe"><FONT POINT-SIZE="15"><B>RM output / RS input</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">tmp: uint64_t[VEC_N1_SIZE_64]</TD></TR>
+          <TR><TD ALIGN="LEFT">46 decoded bytes a_0..a_45</TD></TR>
+          <TR><TD ALIGN="LEFT">A noisy RS-S1 codeword over GF(2^8)</TD></TR>
+        </TABLE>
+      >
+    ];
+  }
+
+  subgraph cluster_rs {
+    label="Reed-Solomon decoder: reed_solomon_decode(m, tmp)";
+    color="#16a34a";
+    penwidth=2;
+    style="rounded";
+    fontsize=15;
+    fontname="DejaVu Sans";
+
+    rs_in [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#16a34a">
+          <TR><TD BGCOLOR="#bbf7d0"><FONT POINT-SIZE="15"><B>RS-S1 parameters</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">Input: 46 symbols, one byte each</TD></TR>
+          <TR><TD ALIGN="LEFT">Field: GF(2^8), polynomial 0x11D</TD></TR>
+          <TR><TD ALIGN="LEFT">k = 16, delta = 15</TD></TR>
+          <TR><TD ALIGN="LEFT">Can correct up to 15 symbol errors</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    synd [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#16a34a">
+          <TR><TD BGCOLOR="#dcfce7"><FONT POINT-SIZE="15"><B>1. Syndromes</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">compute_syndromes()</TD></TR>
+          <TR><TD ALIGN="LEFT">30 syndromes = 2*delta</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    elp [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#16a34a">
+          <TR><TD BGCOLOR="#dcfce7"><FONT POINT-SIZE="15"><B>2. Locator sigma(x)</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">compute_elp()</TD></TR>
+          <TR><TD ALIGN="LEFT">Berlekamp-style constant-time update</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    roots [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#16a34a">
+          <TR><TD BGCOLOR="#dcfce7"><FONT POINT-SIZE="15"><B>3. Error locations</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">compute_roots()</TD></TR>
+          <TR><TD ALIGN="LEFT">additive FFT + retrieve error polynomial</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    eval [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#16a34a">
+          <TR><TD BGCOLOR="#dcfce7"><FONT POINT-SIZE="15"><B>4-5. Error values</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">compute_z_poly()</TD></TR>
+          <TR><TD ALIGN="LEFT">compute_error_values()</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    corr_rs [
+      label=<
+        <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="8" COLOR="#16a34a">
+          <TR><TD BGCOLOR="#dcfce7"><FONT POINT-SIZE="15"><B>6. Correct + extract</B></FONT></TD></TR>
+          <TR><TD ALIGN="LEFT">correct_errors()</TD></TR>
+          <TR><TD ALIGN="LEFT">m = cdw_bytes + (PARAM_G - 1)</TD></TR>
+          <TR><TD ALIGN="LEFT">PARAM_G - 1 = 30 parity bytes</TD></TR>
+        </TABLE>
+      >
+    ];
+  }
+
+  output [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="10" COLOR="#0f172a">
+        <TR><TD BGCOLOR="#fee2e2"><FONT POINT-SIZE="16"><B>Decoder output</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT"><B>m</B>: uint64_t[VEC_K_SIZE_64]</TD></TR>
+        <TR><TD ALIGN="LEFT">16-byte HQC-128 message</TD></TR>
+        <TR><TD ALIGN="LEFT">PARAM_K = 16</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  sources [
+    label=<
+      <TABLE BORDER="1" CELLBORDER="0" CELLSPACING="0" CELLPADDING="7" COLOR="#94a3b8">
+        <TR><TD BGCOLOR="#f8fafc"><FONT POINT-SIZE="13"><B>Checked against</B></FONT></TD></TR>
+        <TR><TD ALIGN="LEFT">hqc_lab_scalar/src/common/code.c</TD></TR>
+        <TR><TD ALIGN="LEFT">hqc_lab_scalar/src/ref/reed_muller.c</TD></TR>
+        <TR><TD ALIGN="LEFT">hqc_lab_scalar/src/ref/reed_solomon.c</TD></TR>
+        <TR><TD ALIGN="LEFT">hqc_lab_scalar/src/ref/hqc-1/parameters.h</TD></TR>
+        <TR><TD ALIGN="LEFT">git/hqc_specifications_2025_08_22.pdf, Section 3.4</TD></TR>
+      </TABLE>
+    >
+  ];
+
+  input -> layout -> rm_loop -> expand -> hadamard -> correct -> peak -> rm_out;
+  rm_out -> rs_in -> synd -> elp -> roots -> eval -> corr_rs -> output;
+  sources -> output [style=dashed, color="#94a3b8", arrowhead=none];
+}

@@ -14,18 +14,18 @@ HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}"
 case "$HQC_PARAM_LEVEL" in
     128)
         PARAM_DIR="hqc-1"
-        FIXTURE_PREFIX="hqc128"
-        BENCH_ITERS="${HQC128_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
+        FIXTURE_PREFIX="hqc1"
+        BENCH_ITERS="${HQC1_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     192)
         PARAM_DIR="hqc-3"
-        FIXTURE_PREFIX="hqc192"
-        BENCH_ITERS="${HQC192_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
+        FIXTURE_PREFIX="hqc3"
+        BENCH_ITERS="${HQC3_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     256)
         PARAM_DIR="hqc-5"
-        FIXTURE_PREFIX="hqc256"
-        BENCH_ITERS="${HQC256_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
+        FIXTURE_PREFIX="hqc5"
+        BENCH_ITERS="${HQC5_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     *)
         echo "ERROR: HQC_PARAM_LEVEL must be 128, 192, or 256" >&2

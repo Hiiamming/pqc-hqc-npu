@@ -204,7 +204,7 @@ benchmark in one step:
 ```sh
 ANDROID_NDK_HOME=/path/to/android-ndk \
 ANDROID_API=34 \
-bash bench_android_hqc128.sh
+bash bench_android_hqc1.sh
 ```
 
 When using the GCC/Bionic workaround, build first and then let the same wrapper
@@ -218,7 +218,7 @@ SKIP_BUILD=1 \
 DEVICE_DIR=/data/local/tmp/QDC_files/hdk8550_fastrpc_intrinsic_pass12_fastest \
 SMOKE_ITERS=10 \
 BENCH_ITERS=10000 \
-bash bench_android_hqc128.sh
+bash bench_android_hqc1.sh
 ```
 
 By default this builds HQC-128. The same FastRPC wrapper can build one
@@ -351,7 +351,7 @@ SKIP_BUILD=1 \
 DEVICE_DIR=/data/local/tmp/QDC_files/hdk8550_fastrpc_intrinsic_pass12_fastest \
 SMOKE_ITERS=10 \
 BENCH_ITERS=10000 \
-bash bench_android_hqc128.sh
+bash bench_android_hqc1.sh
 ```
 
 Push artifacts:
@@ -499,10 +499,10 @@ Deploy and run the ARM64 CPU baseline:
 
 ```sh
 mkdir -p /data/local/tmp/QDC_files/scalar_on_board_cpu
-# copy scalar_on_board_cpu/build/hqc128_decode_bench_arm64
+# copy scalar_on_board_cpu/build/hqc1_decode_bench_arm64
 cd /data/local/tmp/QDC_files/scalar_on_board_cpu
-chmod +x hqc128_decode_bench_arm64
-./hqc128_decode_bench_arm64
+chmod +x hqc1_decode_bench_arm64
+./hqc1_decode_bench_arm64
 ```
 
 Record at least:
@@ -544,9 +544,9 @@ The simulator intrinsic code and the FastRPC wrapper support HQC-128,
 HQC-192, and HQC-256. First check the simulator path for the same parameter set:
 
 ```sh
-bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh
-bash hqc_lab_insintric/scripts/run_hqc192_decode_bench_hexagon.sh
-bash hqc_lab_insintric/scripts/run_hqc256_decode_bench_hexagon.sh
+bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh
+bash hqc_lab_insintric/scripts/run_hqc3_decode_bench_hexagon.sh
+bash hqc_lab_insintric/scripts/run_hqc5_decode_bench_hexagon.sh
 ```
 
 Then build exactly one FastRPC parameter set and deploy the generated artifacts:

@@ -19,14 +19,14 @@ These rows were rerun on the current working tree with the 16-fixture HQC-128 de
 Commands:
 
 ```sh
-HQC128_BENCH_ITERS=1  bash labs/scalar/scripts/run_hqc128_decode_bench_hexagon.sh
-HQC128_BENCH_ITERS=10 bash labs/scalar/scripts/run_hqc128_decode_bench_hexagon.sh
+HQC1_BENCH_ITERS=1  bash labs/scalar/scripts/run_hqc1_decode_bench_hexagon.sh
+HQC1_BENCH_ITERS=10 bash labs/scalar/scripts/run_hqc1_decode_bench_hexagon.sh
 
-HQC128_BENCH_ITERS=1  bash labs/ct/scripts/run_hqc128_decode_bench_hexagon.sh
-HQC128_BENCH_ITERS=10 bash labs/ct/scripts/run_hqc128_decode_bench_hexagon.sh
+HQC1_BENCH_ITERS=1  bash labs/ct/scripts/run_hqc1_decode_bench_hexagon.sh
+HQC1_BENCH_ITERS=10 bash labs/ct/scripts/run_hqc1_decode_bench_hexagon.sh
 
-HQC128_BENCH_ITERS=1  bash labs/fastest/scripts/run_hqc128_decode_bench_hexagon.sh
-HQC128_BENCH_ITERS=10 bash labs/fastest/scripts/run_hqc128_decode_bench_hexagon.sh
+HQC1_BENCH_ITERS=1  bash labs/fastest/scripts/run_hqc1_decode_bench_hexagon.sh
+HQC1_BENCH_ITERS=10 bash labs/fastest/scripts/run_hqc1_decode_bench_hexagon.sh
 ```
 
 The per-decode estimate subtracts fixed benchmark startup cost:
@@ -59,14 +59,14 @@ Substage commands:
 
 ```sh
 for stage in 1 2 3 4 5 6 7 8 9; do
-  HQC128_SUBSTAGE=$stage HQC128_BENCH_ITERS=1  bash labs/scalar/scripts/run_hqc128_decode_substage_bench_hexagon.sh
-  HQC128_SUBSTAGE=$stage HQC128_BENCH_ITERS=10 bash labs/scalar/scripts/run_hqc128_decode_substage_bench_hexagon.sh
+  HQC1_SUBSTAGE=$stage HQC1_BENCH_ITERS=1  bash labs/scalar/scripts/run_hqc1_decode_substage_bench_hexagon.sh
+  HQC1_SUBSTAGE=$stage HQC1_BENCH_ITERS=10 bash labs/scalar/scripts/run_hqc1_decode_substage_bench_hexagon.sh
 
-  HQC128_SUBSTAGE=$stage HQC128_BENCH_ITERS=1  bash labs/ct/scripts/run_hqc128_decode_substage_bench_hexagon.sh
-  HQC128_SUBSTAGE=$stage HQC128_BENCH_ITERS=10 bash labs/ct/scripts/run_hqc128_decode_substage_bench_hexagon.sh
+  HQC1_SUBSTAGE=$stage HQC1_BENCH_ITERS=1  bash labs/ct/scripts/run_hqc1_decode_substage_bench_hexagon.sh
+  HQC1_SUBSTAGE=$stage HQC1_BENCH_ITERS=10 bash labs/ct/scripts/run_hqc1_decode_substage_bench_hexagon.sh
 
-  HQC128_SUBSTAGE=$stage HQC128_BENCH_ITERS=1  bash labs/fastest/scripts/run_hqc128_decode_substage_bench_hexagon.sh
-  HQC128_SUBSTAGE=$stage HQC128_BENCH_ITERS=10 bash labs/fastest/scripts/run_hqc128_decode_substage_bench_hexagon.sh
+  HQC1_SUBSTAGE=$stage HQC1_BENCH_ITERS=1  bash labs/fastest/scripts/run_hqc1_decode_substage_bench_hexagon.sh
+  HQC1_SUBSTAGE=$stage HQC1_BENCH_ITERS=10 bash labs/fastest/scripts/run_hqc1_decode_substage_bench_hexagon.sh
 done
 ```
 
@@ -182,9 +182,9 @@ HQC-192 NPU CT rerun samples:
 
 | Run | elapsed ms | us/decode | decodes/s | delta W | uJ/decode | decodes/s/W | Raw dir |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 1 | 14670.000 | 90.688 | 10906.612 | 0.413827462 | 37.943 | 26355.458 | `results/qprof/qprof_hqc_ct_rerun_192_20260525/20260525_210115_hqc192_npu_ct_direct` |
-| 2 | 14820.000 | 90.681 | 10796.221 | 0.393341263 | 36.433 | 27447.467 | `results/qprof/qprof_hqc_ct_rerun_192_20260525/20260525_210300_hqc192_npu_ct_direct` |
-| 3 | 14830.000 | 90.679 | 10788.941 | 0.368034106 | 34.112 | 29315.058 | `results/qprof/qprof_hqc_ct_rerun_192_20260525/20260525_210443_hqc192_npu_ct_direct` |
+| 1 | 14670.000 | 90.688 | 10906.612 | 0.413827462 | 37.943 | 26355.458 | `results/qprof/qprof_hqc_ct_rerun_192_20260525/20260525_210115_hqc3_npu_ct_direct` |
+| 2 | 14820.000 | 90.681 | 10796.221 | 0.393341263 | 36.433 | 27447.467 | `results/qprof/qprof_hqc_ct_rerun_192_20260525/20260525_210300_hqc3_npu_ct_direct` |
+| 3 | 14830.000 | 90.679 | 10788.941 | 0.368034106 | 34.112 | 29315.058 | `results/qprof/qprof_hqc_ct_rerun_192_20260525/20260525_210443_hqc3_npu_ct_direct` |
 
 ### Paper Metrics
 
@@ -261,12 +261,12 @@ runs.
 
 | HQC | Backend | Result | Total decodes | elapsed ms | us/decode | process CPU s | process CPU % | CPU ms/decode | Reduction vs CPU % | Raw dir |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| HQC-128 | CPU scalar | PASS | 160000 | 12883.489 | 80.522 | 12.820000000 | 98.691301 | 0.080125000 | 0.000 | `results/qprof/qprof_hqc_whole_runs/20260525_173428_hqc128_cpu_scalar_process` |
-| HQC-128 | NPU fastest non-CT | PASS | 160000 | 6383.432 | 39.896 | 0.030000000 | 0.452489 | 0.000187500 | 99.766 | `results/qprof/qprof_hqc_whole_runs/20260525_173501_hqc128_npu_fastest_nonct_process` |
-| HQC-128 | NPU CT | PASS | 160000 | 10148.371 | 63.427 | 0.010000000 | 0.095877 | 0.000062500 | 99.922 | `results/qprof/qprof_hqc_ct_runs/20260525_173819_hqc128_npu_ct_process` |
-| HQC-192 | CPU scalar | PASS | 160000 | 16528.345 | 103.302 | 16.470000000 | 98.800240 | 0.102937500 | 0.000 | `results/qprof/qprof_hqc_whole_runs/20260525_173519_hqc192_cpu_scalar_process` |
-| HQC-192 | NPU fastest non-CT | PASS | 160000 | 8232.958 | 51.456 | 0.030000000 | 0.355872 | 0.000187500 | 99.818 | `results/qprof/qprof_hqc_whole_runs/20260525_173557_hqc192_npu_fastest_nonct_process` |
-| HQC-192 | NPU CT | PASS | 160000 | 14510.889 | 90.693 | 0.020000000 | 0.135777 | 0.000125000 | 99.879 | `results/qprof/qprof_hqc_ct_runs/20260525_173856_hqc192_npu_ct_process` |
-| HQC-256 | CPU scalar | PASS | 160000 | 36320.682 | 227.004 | 36.210000000 | 99.151150 | 0.226312500 | 0.000 | `results/qprof/qprof_hqc_whole_runs/20260525_173617_hqc256_cpu_scalar_process` |
-| HQC-256 | NPU fastest non-CT | PASS | 160000 | 12246.433 | 76.540 | 0.020000000 | 0.161290 | 0.000125000 | 99.945 | `results/qprof/qprof_hqc_whole_runs/20260525_173716_hqc256_npu_fastest_nonct_process` |
-| HQC-256 | NPU CT | PASS | 160000 | 27091.375 | 169.321 | 0.030000000 | 0.109810 | 0.000187500 | 99.917 | `results/qprof/qprof_hqc_ct_runs/20260525_173939_hqc256_npu_ct_process` |
+| HQC-128 | CPU scalar | PASS | 160000 | 12883.489 | 80.522 | 12.820000000 | 98.691301 | 0.080125000 | 0.000 | `results/qprof/qprof_hqc_whole_runs/20260525_173428_hqc1_cpu_scalar_process` |
+| HQC-128 | NPU fastest non-CT | PASS | 160000 | 6383.432 | 39.896 | 0.030000000 | 0.452489 | 0.000187500 | 99.766 | `results/qprof/qprof_hqc_whole_runs/20260525_173501_hqc1_npu_fastest_nonct_process` |
+| HQC-128 | NPU CT | PASS | 160000 | 10148.371 | 63.427 | 0.010000000 | 0.095877 | 0.000062500 | 99.922 | `results/qprof/qprof_hqc_ct_runs/20260525_173819_hqc1_npu_ct_process` |
+| HQC-192 | CPU scalar | PASS | 160000 | 16528.345 | 103.302 | 16.470000000 | 98.800240 | 0.102937500 | 0.000 | `results/qprof/qprof_hqc_whole_runs/20260525_173519_hqc3_cpu_scalar_process` |
+| HQC-192 | NPU fastest non-CT | PASS | 160000 | 8232.958 | 51.456 | 0.030000000 | 0.355872 | 0.000187500 | 99.818 | `results/qprof/qprof_hqc_whole_runs/20260525_173557_hqc3_npu_fastest_nonct_process` |
+| HQC-192 | NPU CT | PASS | 160000 | 14510.889 | 90.693 | 0.020000000 | 0.135777 | 0.000125000 | 99.879 | `results/qprof/qprof_hqc_ct_runs/20260525_173856_hqc3_npu_ct_process` |
+| HQC-256 | CPU scalar | PASS | 160000 | 36320.682 | 227.004 | 36.210000000 | 99.151150 | 0.226312500 | 0.000 | `results/qprof/qprof_hqc_whole_runs/20260525_173617_hqc5_cpu_scalar_process` |
+| HQC-256 | NPU fastest non-CT | PASS | 160000 | 12246.433 | 76.540 | 0.020000000 | 0.161290 | 0.000125000 | 99.945 | `results/qprof/qprof_hqc_whole_runs/20260525_173716_hqc5_npu_fastest_nonct_process` |
+| HQC-256 | NPU CT | PASS | 160000 | 27091.375 | 169.321 | 0.030000000 | 0.109810 | 0.000187500 | 99.917 | `results/qprof/qprof_hqc_ct_runs/20260525_173939_hqc5_npu_ct_process` |

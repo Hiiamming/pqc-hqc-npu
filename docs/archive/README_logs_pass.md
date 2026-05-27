@@ -193,13 +193,13 @@ Qualcomm Profiler
 
 HQC-128 (default):
 
-  `HQC128_BENCH_ITERS=100 bash hqc_lab_scalar/scripts/run_hqc128_decode_bench_hexagon.sh`
-  `HQC128_BENCH_ITERS=100 bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`
+  `HQC1_BENCH_ITERS=100 bash hqc_lab_scalar/scripts/run_hqc1_decode_bench_hexagon.sh`
+  `HQC1_BENCH_ITERS=100 bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh`
 
-HQC-192 and HQC-256 use the same script naming with the prefix swapped, and the matching `HQC192_BENCH_ITERS` / `HQC256_BENCH_ITERS` variable:
+HQC-192 and HQC-256 use the same script naming with the prefix swapped, and the matching `HQC3_BENCH_ITERS` / `HQC5_BENCH_ITERS` variable:
 
-  `HQC192_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc192_decode_bench_hexagon.sh`
-  `HQC256_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc256_decode_bench_hexagon.sh`
+  `HQC3_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc3_decode_bench_hexagon.sh`
+  `HQC5_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc5_decode_bench_hexagon.sh`
 
 ## Parameter sets (from the HQC spec, 2025-08-22)
 
@@ -260,8 +260,8 @@ Remaining loopholes before calling the strategy hardware-proven:
 Local Android Plan A artifacts are ready here:
 
 ```text
-hqc_fastrpc_intrinsic_android/hqc192_npu_fastest_nonct_planA/
-hqc_fastrpc_intrinsic_android/hqc256_npu_fastest_nonct_planA/
+hqc_fastrpc_intrinsic_android/hqc3_npu_fastest_nonct_planA/
+hqc_fastrpc_intrinsic_android/hqc5_npu_fastest_nonct_planA/
 ```
 
 QRD8650 hardware validation on device `ac6088de`:
@@ -356,9 +356,9 @@ These runs use the current `hqc_lab_insintric` default fastest Hexagon simulator
 
 Commands:
 
-  `HQC128_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`
-  `HQC192_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc192_decode_bench_hexagon.sh`
-  `HQC256_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc256_decode_bench_hexagon.sh`
+  `HQC1_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh`
+  `HQC3_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc3_decode_bench_hexagon.sh`
+  `HQC5_BENCH_ITERS=10 bash hqc_lab_insintric/scripts/run_hqc5_decode_bench_hexagon.sh`
 
 All three parameter sets used the 16-fixture corpus. Estimated Pcycles/decode uses `(10-iter Pcycles - 1-iter Pcycles) / (9 * 16)`.
 
@@ -394,14 +394,14 @@ Default HQC-192 and HQC-256 builds (no opt-in flags) compile cleanly and decode 
 | 1 | Split scalar baseline from HVX intrinsic build; added HVX RM Hadamard add/sub and peak absolute-max reduction. | `hqc_lab_scalar/src/ref/reed_muller.c` baseline; `hqc_lab_insintric/src/ref/reed_muller.c`: `hadamard_hvx`, `find_peaks_hvx`, `reed_muller_decode` |
 | 2 | Removed scalar even/odd gather from HVX Hadamard by using HVX deal/deinterleave. | `hqc_lab_insintric/src/ref/reed_muller.c`: `hadamard_hvx` |
 | 3 | Replaced scalar peak scan with HVX predicate/index-vector tie-break logic. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_index_lo`, `rm_index_hi`, `find_peaks_hvx` |
-| 4 | Added HVX RM expand/sum path and RM-vs-RS stage benchmark. | `hqc_lab_insintric/src/ref/reed_muller.c`: `expand_and_sum_hvx`; `hqc_lab_insintric/demos/hqc128_decode_stage_bench.c`; `hqc_lab_insintric/scripts/run_hqc128_decode_stage_bench_hexagon.sh` |
+| 4 | Added HVX RM expand/sum path and RM-vs-RS stage benchmark. | `hqc_lab_insintric/src/ref/reed_muller.c`: `expand_and_sum_hvx`; `hqc_lab_insintric/demos/hqc1_decode_stage_bench.c`; `hqc_lab_insintric/scripts/run_hqc1_decode_stage_bench_hexagon.sh` |
 | 5 | Added fixed-flow hardware-style GF multiplier and opt-in GF LUT experiment. | `hqc_lab_insintric/src/ref/gf.c`: `gf_mul_hwstyle`, `gf_mul`; intrinsic benchmark scripts: `HQC_USE_GF_HWSTYLE_MUL`, `HQC_GF_LUT_MUL` |
-| 6 | Vectorized RS syndrome computation with HVX and defaulted it in intrinsic Hexagon scripts. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_syndromes_hvx`; `hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`: `HQC_HVX_RS_SYNDROME` |
-| 7 | Targeted top substage bottlenecks: packed RM expand/sum, shortened RS Chien roots, and gated fast non-CT RS ELP/error-values experiments. | `hqc_lab_insintric/src/ref/reed_muller.c`: `expand_and_sum_hvx`; `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_elp`, `compute_roots`, `compute_error_values`; `hqc_lab_insintric/demos/hqc128_decode_substage_bench.c` |
+| 6 | Vectorized RS syndrome computation with HVX and defaulted it in intrinsic Hexagon scripts. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_syndromes_hvx`; `hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh`: `HQC_HVX_RS_SYNDROME` |
+| 7 | Targeted top substage bottlenecks: packed RM expand/sum, shortened RS Chien roots, and gated fast non-CT RS ELP/error-values experiments. | `hqc_lab_insintric/src/ref/reed_muller.c`: `expand_and_sum_hvx`; `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_elp`, `compute_roots`, `compute_error_values`; `hqc_lab_insintric/demos/hqc1_decode_substage_bench.c` |
 | 8 | Optimized the fastest benchmark-only RS/GF path with a full GF(256) multiplication table and LUT inverse. | `hqc_lab_insintric/src/ref/gf.c`: `gf_mul_table`, `gf_mul`, `gf_inverse`; enabled by `HQC_GF_LUT_MUL=1` |
 | 9 | Added benchmark-only RM expand/sum table lookup and degree-bound fast RS roots/error-values. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_expand3_nibble_table`, `expand_and_sum_hvx`; `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots`, `compute_error_values`; enabled by `HQC_RM_EXPAND_LUT=1` plus fast RS/GF flags |
-| 10 | Added benchmark-only fused RM expand/Hadamard/peak path for full decode. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_decode_one_hvx_fast`, `reed_muller_decode`; `hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh`: `HQC_RM_FUSED_FAST` |
-| 11 | Tightened the fast RS algebra path: degree-bound BM auxiliary update, degree-bound z polynomial, and derivative-based Forney denominator. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_elp`, `compute_z_poly`, `compute_error_values`; `hqc_lab_insintric/demos/hqc128_decode_substage_bench.c` |
+| 10 | Added benchmark-only fused RM expand/Hadamard/peak path for full decode. | `hqc_lab_insintric/src/ref/reed_muller.c`: `rm_decode_one_hvx_fast`, `reed_muller_decode`; `hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh`: `HQC_RM_FUSED_FAST` |
+| 11 | Tightened the fast RS algebra path: degree-bound BM auxiliary update, degree-bound z polynomial, and derivative-based Forney denominator. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_elp`, `compute_z_poly`, `compute_error_values`; `hqc_lab_insintric/demos/hqc1_decode_substage_bench.c` |
 | 12 | Added benchmark-only HVX Chien root evaluation across the 46 shortened RS support positions. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `rs_support_powers`; Hexagon scripts: `HQC_RS_ROOTS_HVX` |
 | 12b | Generalized `compute_roots_hvx` to multi-vector support so HQC-256 (PARAM_N1=90 > 64 lanes) works alongside HQC-128 / HQC-192. Vector count `RS_SUPPORT_VEC_COUNT = CEIL_DIVIDE(PARAM_N1, 64)`. HQC-128 / HQC-192 binaries are byte-identical to the single-vector version (compiler unrolls). NOTE: PQClean's HQC-256 reference uses additive FFT rather than Chien (FFT cost ~256·log2 256 = 2048 GF muls vs Chien 90·29 = 2610), so the scalar FFT default may still win at HQC-256. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `compute_roots_hvx`, `RS_SUPPORT_VEC_COUNT` |
 | 13 | Promoted CT-safe default optimizations: fixed-loop HVX roots, fixed-flow RS-local GF arithmetic, derivative error values, and CT RM peak sign recovery. | `hqc_lab_insintric/src/ref/reed_solomon.c`: `rs_gf_mul_ct`, `compute_roots_hvx`, `compute_error_values`; `hqc_lab_insintric/src/ref/reed_muller.c`: `find_peaks_hvx`, `rm_decode_one_hvx_fast`; Hexagon scripts default `HQC_RS_ROOTS_HVX=1`, `HQC_RM_FUSED_FAST=1` |
@@ -434,7 +434,7 @@ The third intrinsic pass removed the scalar scan from `find_peaks_hvx`. It now u
 
 The fourth intrinsic pass changed `expand_and_sum` for the intrinsic build. Bit extraction is still scalar, but the three RM repetitions are expanded into aligned temporary vectors and summed with HVX halfword adds. This was kept only after the simulator benchmark showed a further reduction.
 
-A stage benchmark was added in `hqc_lab_insintric/demos/hqc128_decode_stage_bench.c` with `hqc_lab_insintric/scripts/run_hqc128_decode_stage_bench_hexagon.sh`. It separates Reed-Muller and Reed-Solomon decode cost so the next optimization target is based on counters rather than guesswork.
+A stage benchmark was added in `hqc_lab_insintric/demos/hqc1_decode_stage_bench.c` with `hqc_lab_insintric/scripts/run_hqc1_decode_stage_bench_hexagon.sh`. It separates Reed-Muller and Reed-Solomon decode cost so the next optimization target is based on counters rather than guesswork.
 
 The fifth pass used `git/pqc-hqc-hardware/hardware/decap/gfmul.v` as the reference shape for GF multiplication. The new default intrinsic build uses an unrolled `xtime`/xor GF multiplier behind `HQC_USE_GF_HWSTYLE_MUL`. This keeps GF multiplication arithmetic and fixed-flow, unlike the faster LUT experiment. A first looped version was correct but slower; only the unrolled version was promoted after stage and full-decode benchmarks improved.
 
@@ -442,7 +442,7 @@ The sixth pass vectorized RS syndrome computation with HVX. For each received RS
 
 The fixture generator now emits a 16-case deterministic random corpus instead of one fixed case. Each benchmark iteration decodes all 16 fixtures, covering random messages and RS-symbol error counts from 0 through `PARAM_DELTA`.
 
-An intrinsic-only substage benchmark was added in `hqc_lab_insintric/demos/hqc128_decode_substage_bench.c` with `hqc_lab_insintric/scripts/run_hqc128_decode_substage_bench_hexagon.sh`. It is compiled with `HQC_ENABLE_SUBSTAGE_BENCH=1` and does not change the production decode path. Timed loops use a small checksum instead of full `memcmp` validation to avoid measuring the verifier more than the target substage.
+An intrinsic-only substage benchmark was added in `hqc_lab_insintric/demos/hqc1_decode_substage_bench.c` with `hqc_lab_insintric/scripts/run_hqc1_decode_substage_bench_hexagon.sh`. It is compiled with `HQC_ENABLE_SUBSTAGE_BENCH=1` and does not change the production decode path. Timed loops use a small checksum instead of full `memcmp` validation to avoid measuring the verifier more than the target substage.
 
 An opt-in GF multiplication LUT experiment was added behind `HQC_GF_LUT_MUL=1`. This is not the default intrinsic path because it changes GF multiplication from arithmetic constant-time code to data-dependent table lookups. It is useful as a benchmark/engineering tradeoff point, not automatically suitable for production crypto.
 
@@ -473,13 +473,13 @@ The twelfth pass adds an opt-in HVX Chien search for the fastest mode. It precom
 
 The thirteenth pass keeps the default side-channel-resistant strategy but moves the safe parts of the faster experiments into the default Hexagon build. The HVX Chien backend now has a default fixed-flow branch that always evaluates all `PARAM_DELTA + 1` locator coefficients, avoids the `sigma[j] != 0` branch, and writes only the public 46 shortened-support positions. Reed-Solomon now uses RS-local inlined fixed-flow GF multiply/square/inverse helpers when `HQC_USE_GF_HWSTYLE_MUL=1` and `HQC_GF_LUT_MUL=0`, removing call overhead without introducing secret-indexed tables. Default RS error values now use the formal derivative denominator in fixed `PARAM_DELTA` loops instead of multiplying over the other located errors. RM peak handling no longer loads `transform[peak_pos]` in the default path; it recovers the peak sign with vector compare/mux/reduction. The side-channel-relaxed fastest path keeps its old fused RM indexed load under `HQC_RS_FAST_NON_CT=1`, so the fastest benchmark result is unchanged.
 
-Current run note: `hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh` now runs the fastest path by default, so the old fastest env flags are no longer needed. Use `HQC128_BENCH_ITERS=10 ./hqc_lab_insintric/scripts/run_hqc128_decode_bench_hexagon.sh` for the standard simulator benchmark.
+Current run note: `hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh` now runs the fastest path by default, so the old fastest env flags are no longer needed. Use `HQC1_BENCH_ITERS=10 ./hqc_lab_insintric/scripts/run_hqc1_decode_bench_hexagon.sh` for the standard simulator benchmark.
 
 ## Benchmark results
 
 When a candidate is correctness-safe and improves simulator Pcycles, this file should be updated with the new result before moving on.
 
-All runs used `demos/hqc128_decode_bench.c`, the same fixture, and `HQC128_BENCH_ITERS=100` unless noted.
+All runs used `demos/hqc1_decode_bench.c`, the same fixture, and `HQC1_BENCH_ITERS=100` unless noted.
 
 | Variant | Result | Total insns | Total Pcycles | Wall time |
 | --- | --- | ---: | ---: | ---: |
@@ -536,7 +536,7 @@ Stage benchmark snapshots:
 
 Corpus benchmark snapshots:
 
-These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` means 160 total decodes; `HQC128_BENCH_ITERS=1` means 16 total decodes. Estimated Pcycles/decode uses `(10-iter Pcycles - 1-iter Pcycles) / (9 * 16)`.
+These runs used the 16-fixture corpus. `HQC1_BENCH_ITERS=10` means 160 total decodes; `HQC1_BENCH_ITERS=1` means 16 total decodes. Estimated Pcycles/decode uses `(10-iter Pcycles - 1-iter Pcycles) / (9 * 16)`.
 
 | Variant | Iters | Fixtures | Result | Total insns | Total Pcycles |
 | --- | ---: | ---: | --- | ---: | ---: |
@@ -601,7 +601,7 @@ On the corpus benchmark, the seventh-pass default CT path is about 58.4% faster 
 
 Default intrinsic substage snapshots:
 
-These runs used the 16-fixture corpus. `HQC128_BENCH_ITERS=10` and `HQC128_BENCH_ITERS=1` were both run for every substage. Estimated cost is `(10-iter Pcycles - 1-iter Pcycles) / (9 * operation_count_per_iteration)`. RM substages report both per RM block and per full decode, where one decode has `PARAM_N1 = 46` RM blocks.
+These runs used the 16-fixture corpus. `HQC1_BENCH_ITERS=10` and `HQC1_BENCH_ITERS=1` were both run for every substage. Estimated cost is `(10-iter Pcycles - 1-iter Pcycles) / (9 * operation_count_per_iteration)`. RM substages report both per RM block and per full decode, where one decode has `PARAM_N1 = 46` RM blocks.
 
 | Substage | 10-iter Pcycles | 1-iter Pcycles | Estimated cost |
 | --- | ---: | ---: | ---: |

@@ -25,17 +25,17 @@ HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}"
 case "$HQC_PARAM_LEVEL" in
     128)
         PARAM_DIR="hqc-1"
-        FIXTURE_PREFIX="hqc128"
+        FIXTURE_PREFIX="hqc1"
         DEFAULT_ITERS_DEFINE="-DHQC_DEFAULT_BENCH_ITERS=1000"
         ;;
     192)
         PARAM_DIR="hqc-3"
-        FIXTURE_PREFIX="hqc192"
+        FIXTURE_PREFIX="hqc3"
         DEFAULT_ITERS_DEFINE="-DHQC_DEFAULT_BENCH_ITERS=100"
         ;;
     256)
         PARAM_DIR="hqc-5"
-        FIXTURE_PREFIX="hqc256"
+        FIXTURE_PREFIX="hqc5"
         DEFAULT_ITERS_DEFINE="-DHQC_DEFAULT_BENCH_ITERS=50"
         ;;
     *)

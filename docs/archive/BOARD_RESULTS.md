@@ -20,7 +20,7 @@ Board command:
 
 ```sh
 cd /data/local/tmp/QDC_files/scalar_on_board
-./hqc128_decode_bench_arm64
+./hqc1_decode_bench_arm64
 ```
 
 Result:
@@ -667,7 +667,7 @@ Build and upload notes:
 - ARM64 CPU scalar was built with:
 
 ```sh
-HQC128_BENCH_ITERS=10000 bash scalar_on_board_cpu/build_arm64.sh
+HQC1_BENCH_ITERS=10000 bash scalar_on_board_cpu/build_arm64.sh
 ```
 
 - FastRPC scalar was built with:
@@ -706,7 +706,7 @@ Board commands:
 
 ```sh
 cd /data/local/tmp/QDC_files/scalar_on_board
-./hqc128_decode_bench_arm64
+./hqc1_decode_bench_arm64
 
 cd /data/local/tmp/QDC_files/hqc_fastrpc_scalar
 export ADSP_LIBRARY_PATH="$PWD;/usr/lib/dsp/cdsp"
@@ -832,7 +832,7 @@ export CURRENT_PATH=/sys/class/power_supply/battery/current_now
 export SAMPLE_INTERVAL=0.1
 
 cd /data/local/tmp/QDC_files/scalar_on_board
-/data/local/tmp/QDC_files/measure_board_energy.sh qcs8550_arm64_scalar ./hqc128_decode_bench_arm64
+/data/local/tmp/QDC_files/measure_board_energy.sh qcs8550_arm64_scalar ./hqc1_decode_bench_arm64
 
 cd /data/local/tmp/QDC_files/hqc_fastrpc_scalar
 export ADSP_LIBRARY_PATH="$PWD;/usr/lib/dsp/cdsp"
@@ -913,19 +913,19 @@ Build and upload notes:
 ```sh
 aarch64-linux-gnu-gcc -std=c11 -O2 -Wall -Wextra -static \
     -ffunction-sections -fdata-sections \
-    -DHQC128_BENCH_ITERS=10000 \
+    -DHQC1_BENCH_ITERS=10000 \
     -I hqc_lab_scalar/fixtures \
     -I hqc_lab_scalar/src/common \
     -I hqc_lab_scalar/src/ref \
     -I hqc_lab_scalar/src/ref/hqc-1 \
-    scalar_on_board_cpu/hqc128_decode_bench_arm64.c \
-    hqc_lab_scalar/fixtures/hqc128_decode_fixture.c \
+    scalar_on_board_cpu/hqc1_decode_bench_arm64.c \
+    hqc_lab_scalar/fixtures/hqc1_decode_fixture.c \
     hqc_lab_scalar/src/common/fft.c \
     hqc_lab_scalar/src/ref/gf.c \
     hqc_lab_scalar/src/ref/reed_muller.c \
     hqc_lab_scalar/src/ref/reed_solomon.c \
     -Wl,--gc-sections \
-    -o /tmp/hqc128_decode_bench_arm64_static
+    -o /tmp/hqc1_decode_bench_arm64_static
 ```
 
 - Android did not have an NDK in this workspace. The FastRPC host was built by compiling AArch64 objects with `aarch64-linux-gnu-gcc`, then linking a PIE against Bionic libraries pulled from the device:
@@ -964,7 +964,7 @@ Board commands:
 
 ```sh
 cd /data/local/tmp/QDC_files/sm8650_cpu
-./hqc128_decode_bench_arm64_static
+./hqc1_decode_bench_arm64_static
 
 cd /data/local/tmp/QDC_files/sm8650_fastrpc_scalar
 export ADSP_LIBRARY_PATH="$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp"
@@ -1164,7 +1164,7 @@ Board commands:
 
 ```sh
 cd /data/local/tmp/QDC_files/hdk8550_cpu
-./hqc128_decode_bench_arm64_static
+./hqc1_decode_bench_arm64_static
 
 cd /data/local/tmp/QDC_files/hdk8550_fastrpc_scalar
 export ADSP_LIBRARY_PATH="$PWD;/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/cdsp;/dsp"
