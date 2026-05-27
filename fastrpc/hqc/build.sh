@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SHARED_DIR="$ROOT_DIR/shared"
 PROJECT_DIR="${HQC_PROJECT_DIR:-$ROOT_DIR/labs/fastest}"
 HEXAGON_SDK_ROOT="${HEXAGON_SDK_ROOT:-$ROOT_DIR/../tools/hexagon-sdk}"
 
@@ -51,7 +52,7 @@ for tool in "$QAIC" "$HEXAGON_CLANG" "$AARCH64_CC"; do
     fi
 done
 
-if [ ! -f "$PROJECT_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
+if [ ! -f "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
     "$PROJECT_DIR/scripts/gen_${FIXTURE_PREFIX}_decode_fixture.sh"
 fi
 
@@ -92,13 +93,13 @@ fi
     -I "$GEN_DIR" \
     -I "$HEXAGON_SDK_ROOT/incs" \
     -I "$HEXAGON_SDK_ROOT/incs/stddef" \
-    -I "$PROJECT_DIR/fixtures" \
+    -I "$SHARED_DIR/fixtures" \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref/$PARAM_DIR" \
     "$GEN_DIR/hqc_skel.c" \
     "$SCRIPT_DIR/dsp/hqc_dsp.c" \
-    "$PROJECT_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" \
+    "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" \
     "${common_sources[@]}" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \

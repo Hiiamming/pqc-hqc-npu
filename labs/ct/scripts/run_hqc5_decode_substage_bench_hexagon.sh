@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROJECT_PARENT="$(cd "$PROJECT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$PROJECT_DIR/../.." && pwd)"
+SHARED_DIR="$REPO_ROOT/shared"
 if [ -n "${HEXAGON_TUTORIAL_ROOT:-}" ]; then
     TUTORIAL_ROOT="$HEXAGON_TUTORIAL_ROOT"
 elif [ -d "$PROJECT_PARENT/tools/hexagon-sdk" ]; then
@@ -33,7 +35,7 @@ for f in "$CLANG" "$SIM" "$BOOTER"; do
     fi
 done
 
-if [ ! -f "$PROJECT_DIR/fixtures/hqc5_decode_fixture.c" ]; then
+if [ ! -f "$SHARED_DIR/fixtures/hqc5_decode_fixture.c" ]; then
     "$SCRIPT_DIR/gen_hqc5_decode_fixture.sh"
 fi
 
@@ -51,8 +53,10 @@ echo "=== Compiling HQC-256 substage benchmark for Hexagon CT intrinsic path, su
     -DARCHV=75 \
     -DHQC5_SUBSTAGE="$SUBSTAGE" \
     -DHQC5_BENCH_ITERS="$BENCH_ITERS" \
-    -I "$PROJECT_DIR/fixtures" \
+    -I "$SHARED_DIR/fixtures" \
+    -I "$SHARED_DIR/src/common" \
     -I "$PROJECT_DIR/src/common" \
+    -I "$SHARED_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref/hqc-5" \
     -I "$H2_INSTALL/include" \
@@ -63,7 +67,7 @@ echo "=== Compiling HQC-256 substage benchmark for Hexagon CT intrinsic path, su
     -Wl,--gc-sections \
     -o "$OUT" \
     "$PROJECT_DIR/demos/hqc5_decode_substage_bench.c" \
-    "$PROJECT_DIR/fixtures/hqc5_decode_fixture.c" \
+    "$SHARED_DIR/fixtures/hqc5_decode_fixture.c" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \
     "$PROJECT_DIR/src/ref/reed_solomon.c"

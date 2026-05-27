@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SHARED_DIR="$ROOT_DIR/shared"
 PROJECT_DIR="$ROOT_DIR/labs/scalar"
 
 CC="${AARCH64_CC:-aarch64-linux-gnu-gcc}"
@@ -36,7 +37,7 @@ if ! command -v "$CC" >/dev/null 2>&1; then
     exit 1
 fi
 
-if [ ! -f "$PROJECT_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
+if [ ! -f "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
     "$PROJECT_DIR/scripts/gen_${FIXTURE_PREFIX}_decode_fixture.sh"
 fi
 
@@ -47,12 +48,12 @@ echo "=== Building HQC-$HQC_PARAM_LEVEL scalar decode baseline for ARM64, iters=
     -ffunction-sections -fdata-sections \
     -DHQC_PARAM_LEVEL="$HQC_PARAM_LEVEL" \
     -DHQC${HQC_PARAM_LEVEL}_BENCH_ITERS="$BENCH_ITERS" \
-    -I "$PROJECT_DIR/fixtures" \
+    -I "$SHARED_DIR/fixtures" \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref/$PARAM_DIR" \
     "$SCRIPT_DIR/hqc_decode_bench_arm64.c" \
-    "$PROJECT_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" \
+    "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" \
     "$PROJECT_DIR/src/common/fft.c" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \

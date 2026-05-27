@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SHARED_DIR="$ROOT_DIR/shared"
 PROJECT_DIR="$ROOT_DIR/labs/scalar"
 
 AARCH64_GCC="${AARCH64_GCC:-aarch64-linux-gnu-gcc}"
@@ -46,7 +47,7 @@ if ! command -v "$ADB" >/dev/null 2>&1 && [ ! -x "$ADB" ]; then
     exit 1
 fi
 
-if [ ! -f "$PROJECT_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
+if [ ! -f "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
     "$PROJECT_DIR/scripts/gen_${FIXTURE_PREFIX}_decode_fixture.sh"
 fi
 
@@ -94,7 +95,7 @@ common_cflags=(
     -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
     -DHQC_PARAM_LEVEL="$HQC_PARAM_LEVEL"
     -DHQC${HQC_PARAM_LEVEL}_BENCH_ITERS="$BENCH_ITERS"
-    -I "$PROJECT_DIR/fixtures"
+    -I "$SHARED_DIR/fixtures"
     -I "$PROJECT_DIR/src/common"
     -I "$PROJECT_DIR/src/ref"
     -I "$PROJECT_DIR/src/ref/$PARAM_DIR"
@@ -103,7 +104,7 @@ common_cflags=(
 echo "=== Building HQC-$HQC_PARAM_LEVEL scalar decode baseline for Android/Bionic, iters=$BENCH_ITERS ==="
 "$AARCH64_GCC" "${common_cflags[@]}" -c "$BUILD_DIR/android_start.cpu.c" -o "$BUILD_DIR/android_start.cpu.o"
 "$AARCH64_GCC" "${common_cflags[@]}" -c "$SCRIPT_DIR/hqc_decode_bench_arm64.c" -o "$BUILD_DIR/hqc${HQC_PARAM_LEVEL}_decode_bench_arm64.android.o"
-"$AARCH64_GCC" "${common_cflags[@]}" -c "$PROJECT_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" -o "$BUILD_DIR/${FIXTURE_PREFIX}_decode_fixture.android.o"
+"$AARCH64_GCC" "${common_cflags[@]}" -c "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" -o "$BUILD_DIR/${FIXTURE_PREFIX}_decode_fixture.android.o"
 "$AARCH64_GCC" "${common_cflags[@]}" -c "$PROJECT_DIR/src/common/fft.c" -o "$BUILD_DIR/fft.android.o"
 "$AARCH64_GCC" "${common_cflags[@]}" -c "$PROJECT_DIR/src/ref/gf.c" -o "$BUILD_DIR/gf.android.o"
 "$AARCH64_GCC" "${common_cflags[@]}" -c "$PROJECT_DIR/src/ref/reed_muller.c" -o "$BUILD_DIR/reed_muller.android.o"

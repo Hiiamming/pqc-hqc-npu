@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$PROJECT_DIR/../.." && pwd)"
+SHARED_DIR="$REPO_ROOT/shared"
 TUTORIAL_ROOT="${HEXAGON_TUTORIAL_ROOT:-$(cd "$PROJECT_DIR/.." && pwd)}"
 HEXAGON_SDK_ROOT="${HEXAGON_SDK_ROOT:-$TUTORIAL_ROOT/tools/hexagon-sdk}"
 
@@ -26,7 +28,7 @@ for f in "$CLANG" "$SIM" "$BOOTER"; do
     fi
 done
 
-if [ ! -f "$PROJECT_DIR/fixtures/hqc1_decode_fixture.c" ]; then
+if [ ! -f "$SHARED_DIR/fixtures/hqc1_decode_fixture.c" ]; then
     "$SCRIPT_DIR/gen_hqc1_decode_fixture.sh"
 fi
 
@@ -40,8 +42,10 @@ echo "=== Compiling HQC-128 decode benchmark for Hexagon scalar, iters=$BENCH_IT
     -mhmx \
     -DARCHV=75 \
     -DHQC1_BENCH_ITERS="$BENCH_ITERS" \
-    -I "$PROJECT_DIR/fixtures" \
+    -I "$SHARED_DIR/fixtures" \
+    -I "$SHARED_DIR/src/common" \
     -I "$PROJECT_DIR/src/common" \
+    -I "$SHARED_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref/hqc-1" \
     -I "$H2_INSTALL/include" \
@@ -52,7 +56,7 @@ echo "=== Compiling HQC-128 decode benchmark for Hexagon scalar, iters=$BENCH_IT
     -Wl,--gc-sections \
     -o "$OUT" \
     "$PROJECT_DIR/demos/hqc1_decode_bench.c" \
-    "$PROJECT_DIR/fixtures/hqc1_decode_fixture.c" \
+    "$SHARED_DIR/fixtures/hqc1_decode_fixture.c" \
     "$PROJECT_DIR/src/common/fft.c" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \

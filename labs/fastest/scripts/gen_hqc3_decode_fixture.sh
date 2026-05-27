@@ -3,12 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-ROOT_DIR="$(cd "$PROJECT_DIR/../.." && pwd)"
-SCALAR_DIR="$ROOT_DIR/labs/scalar"
+REPO_ROOT="$(cd "$PROJECT_DIR/../.." && pwd)"
 
-bash "$SCALAR_DIR/scripts/gen_hqc3_decode_fixture.sh"
-
-mkdir -p "$PROJECT_DIR/fixtures"
-cp "$SCALAR_DIR/fixtures/hqc3_decode_fixture.c" "$PROJECT_DIR/fixtures/hqc3_decode_fixture.c"
-cp "$SCALAR_DIR/fixtures/hqc3_decode_fixture.h" "$PROJECT_DIR/fixtures/hqc3_decode_fixture.h"
-echo "Generated $PROJECT_DIR/fixtures/hqc3_decode_fixture.c from labs/scalar"
+# Delegates to labs/scalar which is the single source of truth
+# for the fixture corpus. The scalar gen script writes directly
+# to $REPO_ROOT/shared/fixtures/, which ct/fastest read via $SHARED_DIR.
+bash "$REPO_ROOT/labs/scalar/scripts/gen_hqc3_decode_fixture.sh"
