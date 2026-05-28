@@ -111,11 +111,7 @@ build_npu_fastest() {
     HEXAGON_ARCH="$HEXAGON_ARCH" \
     HQC_PARAM_LEVEL="$level" \
     HQC_DEFAULT_BENCH_ITERS="$iters" \
-    HQC_RS_FAST_NON_CT=1 \
-    HQC_GF_LUT_MUL=1 \
-    HQC_RM_EXPAND_LUT=1 \
-    HQC_RM_FUSED_FAST=1 \
-    HQC_RS_ROOTS_HVX=1 \
+    HQC_PROJECT_DIR="$ROOT_DIR/labs/fastest" \
         bash "$ROOT_DIR/fastrpc/hqc/build_android_gcc_bionic.sh"
 }
 
@@ -450,7 +446,7 @@ Profiler settings:
 - Build/deploy artifacts skipped: \`SKIP_BUILD=$SKIP_BUILD\`
 - NPU profiler capability: \`profiler:nsp1-dsp-metrics\`
 - CPU path: scalar ARM64 baseline built as an Android/Bionic PIE executable
-- NPU path: current \`hqc_lab_insintric\` fastest non-CT FastRPC build flags (\`HQC_RS_FAST_NON_CT=1\`, \`HQC_GF_LUT_MUL=1\`, \`HQC_RM_EXPAND_LUT=1\`, \`HQC_RM_FUSED_FAST=1\`, \`HQC_RS_ROOTS_HVX=1\`)
+- NPU path: current \`labs/fastest\` FastRPC build
 
 Energy numbers in the main table use direct device power-supply samples with qprof disabled. qprof can perturb power and clock state, so qprof runs are diagnostic-only and are never mixed into the direct-energy table.
 

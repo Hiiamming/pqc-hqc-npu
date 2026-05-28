@@ -222,6 +222,12 @@ static __inline void _qaic_memmove(void* dst, void* src, int size) {
 #ifdef __cplusplus
 extern "C" {
 #endif
+typedef struct _byte_buf__seq_octet _byte_buf__seq_octet;
+typedef _byte_buf__seq_octet byte_buf;
+struct _byte_buf__seq_octet {
+   unsigned char* data;
+   int dataLen;
+};
 /**
     * Opens the handle in the specified domain.  If this is the first
     * handle, this creates the session.  Typically this means opening
@@ -252,7 +258,13 @@ __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_open)(const char* uri, remote_handle6
     * @retval, 0 on success, should always succeed
     */
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_close)(remote_handle64 h) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_ping)(remote_handle64 _h, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_decode_one)(remote_handle64 _h, int* rs_symbol_errors, int* checksum, int* passed) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_decode_bench)(remote_handle64 _h, int iters, int* total_decodes, int* total_rs_symbol_errors, int* checksum, int* passed) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_payload_in)(remote_handle64 _h, const unsigned char* input, int inputLen, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_payload_out)(remote_handle64 _h, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_payload_inout)(remote_handle64 _h, const unsigned char* input, int inputLen, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_decode_buffer_bench)(remote_handle64 _h, const unsigned char* codewords, int codewordsLen, unsigned char* messages, int messagesLen, int iters, int codeword_count, int codeword_stride, int message_stride, int dsp_mode, int* total_decodes, int* checksum, int* passed, int* mode_status) __QAIC_HEADER_ATTRIBUTE;
 #ifndef hqc_URI
 #define hqc_URI "file:///libhqc_skel.so?hqc_skel_handle_invoke&_modver=1.0"
 #endif /*hqc_URI*/

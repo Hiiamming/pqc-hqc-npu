@@ -171,7 +171,7 @@ static void init_alpha_ji_pow(void) {
     alpha_ji_pow_ready = 1;
 }
 
-static inline HVX_Vector gf_xtime_hvx(HVX_Vector x) {
+static inline HVX_Vector __attribute__((always_inline)) gf_xtime_hvx(HVX_Vector x) {
     HVX_Vector zero = Q6_V_vzero();
     HVX_Vector one = Q6_Vh_vsplat_R(1);
     HVX_Vector taps = Q6_Vh_vsplat_R(0x1d);
@@ -182,7 +182,7 @@ static inline HVX_Vector gf_xtime_hvx(HVX_Vector x) {
     return Q6_V_vand_VV(reduced, byte_mask);
 }
 
-static HVX_Vector gf_mul_scalar_by_vec_hvx(uint16_t a, HVX_Vector b) {
+static inline HVX_Vector __attribute__((always_inline)) gf_mul_scalar_by_vec_hvx(uint16_t a, HVX_Vector b) {
     HVX_Vector acc = Q6_V_vzero();
     HVX_Vector avec = Q6_Vh_vsplat_R((int)a);
     HVX_Vector one = Q6_Vh_vsplat_R(1);
@@ -345,7 +345,8 @@ static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t de
     }
 
     init_rs_support_powers();
-    memset(error, 0, 1 << PARAM_M);
+    /* Only the shortened RS support [0, PARAM_N1) is consumed downstream. */
+    memset(error, 0, PARAM_N1);
 
     for (size_t j = 0; j <= degree; ++j) {
         if (sigma[j] != 0) {

@@ -16,16 +16,19 @@ case "$HQC_PARAM_LEVEL" in
     128)
         PARAM_DIR="hqc-1"
         FIXTURE_PREFIX="hqc1"
+        BENCH_DEFINE="HQC1_BENCH_ITERS"
         BENCH_ITERS="${HQC1_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     192)
         PARAM_DIR="hqc-3"
         FIXTURE_PREFIX="hqc3"
+        BENCH_DEFINE="HQC3_BENCH_ITERS"
         BENCH_ITERS="${HQC3_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     256)
         PARAM_DIR="hqc-5"
         FIXTURE_PREFIX="hqc5"
+        BENCH_DEFINE="HQC5_BENCH_ITERS"
         BENCH_ITERS="${HQC5_BENCH_ITERS:-${HQC_BENCH_ITERS:-1000}}"
         ;;
     *)
@@ -94,8 +97,10 @@ common_cflags=(
     -std=c11 -O2 -Wall -Wextra -fPIC
     -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0
     -DHQC_PARAM_LEVEL="$HQC_PARAM_LEVEL"
-    -DHQC${HQC_PARAM_LEVEL}_BENCH_ITERS="$BENCH_ITERS"
+    -D"$BENCH_DEFINE=$BENCH_ITERS"
     -I "$SHARED_DIR/fixtures"
+    -I "$SHARED_DIR/src/common"
+    -I "$SHARED_DIR/src/ref"
     -I "$PROJECT_DIR/src/common"
     -I "$PROJECT_DIR/src/ref"
     -I "$PROJECT_DIR/src/ref/$PARAM_DIR"

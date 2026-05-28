@@ -11,9 +11,12 @@ if [ ! -f "$SHARED_DIR/fixtures/hqc5_decode_fixture.c" ]; then
 fi
 
 OUT="$PROJECT_DIR/build/hqc5_decode_bench_host"
+BENCH_ITERS="${HQC5_BENCH_ITERS:-100}"
 mkdir -p "$(dirname "$OUT")"
 
+echo "=== Compiling HQC-256 decode benchmark for host scalar path, iters=$BENCH_ITERS ==="
 gcc -std=c11 -O2 -Wall -Wextra -ffunction-sections -fdata-sections \
+    -DHQC5_BENCH_ITERS="$BENCH_ITERS" \
     -I "$SHARED_DIR/fixtures" \
     -I "$SHARED_DIR/src/common" \
     -I "$PROJECT_DIR/src/common" \

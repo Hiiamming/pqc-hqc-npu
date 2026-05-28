@@ -11,6 +11,8 @@ QAIC="${QAIC:-$HEXAGON_SDK_ROOT/ipc/fastrpc/qaic/Ubuntu/qaic}"
 HEXAGON_CLANG="${HEXAGON_CLANG:-$HEXAGON_SDK_ROOT/tools/HEXAGON_Tools/19.0.04/Tools/bin/hexagon-clang}"
 AARCH64_CC="${AARCH64_CC:-aarch64-linux-gnu-gcc}"
 FASTRPC_LIB_DIR="${FASTRPC_LIB_DIR:-$HEXAGON_SDK_ROOT/ipc/fastrpc/remote/ship/UbuntuARM_aarch64}"
+RPCMEM_INC_DIR="${RPCMEM_INC_DIR:-$HEXAGON_SDK_ROOT/ipc/fastrpc/rpcmem/inc}"
+RPCMEM_LIB="${RPCMEM_LIB:-$HEXAGON_SDK_ROOT/ipc/fastrpc/rpcmem/prebuilt/UbuntuARM_aarch64/rpcmem.a}"
 AARCH64_LDFLAGS="${AARCH64_LDFLAGS:-}"
 TESTSIG="$HEXAGON_SDK_ROOT/tools/elfsigner/output/testsig-0xaa3ec42e.so"
 
@@ -94,6 +96,8 @@ fi
     -I "$HEXAGON_SDK_ROOT/incs" \
     -I "$HEXAGON_SDK_ROOT/incs/stddef" \
     -I "$SHARED_DIR/fixtures" \
+    -I "$SHARED_DIR/src/common" \
+    -I "$SHARED_DIR/src/ref" \
     -I "$PROJECT_DIR/src/common" \
     -I "$PROJECT_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref/$PARAM_DIR" \
@@ -113,10 +117,18 @@ echo "=== Building ARM64 host ==="
     -I "$GEN_DIR" \
     -I "$HEXAGON_SDK_ROOT/incs" \
     -I "$HEXAGON_SDK_ROOT/incs/stddef" \
+    -I "$RPCMEM_INC_DIR" \
+    -I "$SHARED_DIR/fixtures" \
+    -I "$SHARED_DIR/src/common" \
+    -I "$SHARED_DIR/src/ref" \
+    -I "$PROJECT_DIR/src/ref" \
+    -I "$PROJECT_DIR/src/ref/$PARAM_DIR" \
     "$SCRIPT_DIR/host/main.c" \
     "$GEN_DIR/hqc_stub.c" \
+    "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" \
     -L "$FASTRPC_LIB_DIR" \
     $AARCH64_LDFLAGS \
+    "$RPCMEM_LIB" \
     -lcdsprpc -lpthread \
     -o "$BUILD_DIR/hqc_host"
 

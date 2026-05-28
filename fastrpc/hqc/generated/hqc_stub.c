@@ -272,14 +272,16 @@ struct Interface {
 #define __QAIC_SLIM_EXPORT
 #endif
 
-static const Parameter parameters[5] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)0x0,0}}, 4,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),3,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0}};
-static const Parameter* const parameterArrays[8] = {(&(parameters[3])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[0])),(&(parameters[1])),(&(parameters[2]))};
-static const Method methods[3] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x0,0x0,0x1),0x4,0x0,2,2,(&(parameterArrays[5])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x1,0x0),0x0,0x0,1,1,(&(parameterArrays[7])),0x1,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x4,0x10,5,5,(&(parameterArrays[0])),0x4,0x4}};
-static const Method* const methodArrays[3] = {&(methods[0]),&(methods[1]),&(methods[2])};
-static const char strings[88] = "total_rs_symbol_errors\0total_decodes\0decode_bench\0checksum\0passed\0iters\0close\0open\0uri\0";
-static const uint16_t methodStrings[11] = {37,66,23,0,50,59,78,83,48,72,48};
-static const uint16_t methodStringsArrays[3] = {6,9,0};
-__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(hqc_slim) = {3,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
+static const Type types[1];
+static const Type types[1] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x1}};
+static const Parameter parameters[7] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)0x0,0}}, 4,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),3,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0}};
+static const Parameter* const parameterArrays[21] = {(&(parameters[5])),(&(parameters[6])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[5])),(&(parameters[6])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[3])),(&(parameters[4])),(&(parameters[0])),(&(parameters[1])),(&(parameters[2]))};
+static const Method methods[9] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x0,0x0,0x1),0x4,0x0,2,2,(&(parameterArrays[18])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x1,0x0),0x0,0x0,1,1,(&(parameterArrays[20])),0x1,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x4,0x4,2,2,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0xc,3,3,(&(parameterArrays[7])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x4,0x10,5,5,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[15])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x8,0x4,5,3,(&(parameterArrays[12])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x2,0x0,0x0),0xc,0x4,7,4,(&(parameterArrays[11])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x2,0x0,0x0),0x1c,0x10,14,11,(&(parameterArrays[0])),0x4,0x4}};
+static const Method* const methodArrays[9] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8])};
+static const char strings[260] = "total_rs_symbol_errors\0decode_buffer_bench\0codeword_stride\0message_stride\0codeword_count\0payload_inout\0total_decodes\0decode_bench\0mode_status\0payload_out\0payload_in\0decode_one\0codewords\0dsp_mode\0messages\0checksum\0output\0passed\0input\0iters\0close\0ping\0open\0uri\0";
+static const uint16_t methodStrings[43] = {23,176,195,233,74,43,59,186,103,204,220,130,117,233,103,0,204,220,89,227,213,233,204,142,213,233,204,154,227,233,204,165,6,204,220,245,233,204,250,255,41,239,41};
+static const uint16_t methodStringsArrays[9] = {38,41,35,31,12,27,23,18,0};
+__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(hqc_slim) = {9,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HQC_SLIM_H
 
 
@@ -292,7 +294,51 @@ __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_open)(const char* uri, remote_handle64* h
 __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_close)(remote_handle64 h) __QAIC_STUB_ATTRIBUTE {
    return __QAIC_REMOTE(remote_handle64_close)(h);
 }
-static __inline int _stub_method(remote_handle64 _handle, uint32_t _mid, uint32_t _in0[1], uint32_t _rout1[1], uint32_t _rout2[1], uint32_t _rout3[1], uint32_t _rout4[1]) {
+static __inline int _stub_method(remote_handle64 _handle, uint32_t _mid, uint32_t _in0[1], uint32_t _rout1[1]) {
+   int _numIn[1] = {0};
+   remote_arg _pra[2] = {0};
+   uint32_t _primIn[1]= {0};
+   uint32_t _primROut[1]= {0};
+   int _nErr = 0;
+   _numIn[0] = 0;
+   _pra[0].buf.pv = (void*)_primIn;
+   _pra[0].buf.nLen = sizeof(_primIn);
+   _pra[(_numIn[0] + 1)].buf.pv = (void*)_primROut;
+   _pra[(_numIn[0] + 1)].buf.nLen = sizeof(_primROut);
+   _COPY(_primIn, 0, _in0, 0, 4);
+   _TRY_FARF(_nErr, __QAIC_REMOTE(remote_handle64_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 1, 1, 0, 0), _pra));
+   _COPY(_rout1, 0, _primROut, 0, 4);
+   _CATCH_FARF(_nErr) {
+      _QAIC_FARF(RUNTIME_ERROR, "ERROR 0x%x: handle=0x%"PRIx64", scalar=0x%x, method ID=%d: %s failed\n", _nErr , _handle, REMOTE_SCALARS_MAKEX(0, _mid, 1, 1, 0, 0), _mid, __func__);
+   }
+   return _nErr;
+}
+__QAIC_STUB_EXPORT int __QAIC_STUB(hqc_ping)(remote_handle64 _handle, int iters, int* checksum) __QAIC_STUB_ATTRIBUTE {
+   uint32_t _mid = 2;
+   return _stub_method(_handle, _mid, (uint32_t*)&iters, (uint32_t*)checksum);
+}
+static __inline int _stub_method_1(remote_handle64 _handle, uint32_t _mid, uint32_t _rout0[1], uint32_t _rout1[1], uint32_t _rout2[1]) {
+   int _numIn[1] = {0};
+   remote_arg _pra[1] = {0};
+   uint32_t _primROut[3]= {0};
+   int _nErr = 0;
+   _numIn[0] = 0;
+   _pra[(_numIn[0] + 0)].buf.pv = (void*)_primROut;
+   _pra[(_numIn[0] + 0)].buf.nLen = sizeof(_primROut);
+   _TRY_FARF(_nErr, __QAIC_REMOTE(remote_handle64_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 0, 1, 0, 0), _pra));
+   _COPY(_rout0, 0, _primROut, 0, 4);
+   _COPY(_rout1, 0, _primROut, 4, 4);
+   _COPY(_rout2, 0, _primROut, 8, 4);
+   _CATCH_FARF(_nErr) {
+      _QAIC_FARF(RUNTIME_ERROR, "ERROR 0x%x: handle=0x%"PRIx64", scalar=0x%x, method ID=%d: %s failed\n", _nErr , _handle, REMOTE_SCALARS_MAKEX(0, _mid, 0, 1, 0, 0), _mid, __func__);
+   }
+   return _nErr;
+}
+__QAIC_STUB_EXPORT int __QAIC_STUB(hqc_decode_one)(remote_handle64 _handle, int* rs_symbol_errors, int* checksum, int* passed) __QAIC_STUB_ATTRIBUTE {
+   uint32_t _mid = 3;
+   return _stub_method_1(_handle, _mid, (uint32_t*)rs_symbol_errors, (uint32_t*)checksum, (uint32_t*)passed);
+}
+static __inline int _stub_method_2(remote_handle64 _handle, uint32_t _mid, uint32_t _in0[1], uint32_t _rout1[1], uint32_t _rout2[1], uint32_t _rout3[1], uint32_t _rout4[1]) {
    int _numIn[1] = {0};
    remote_arg _pra[2] = {0};
    uint32_t _primIn[1]= {0};
@@ -315,8 +361,139 @@ static __inline int _stub_method(remote_handle64 _handle, uint32_t _mid, uint32_
    return _nErr;
 }
 __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_decode_bench)(remote_handle64 _handle, int iters, int* total_decodes, int* total_rs_symbol_errors, int* checksum, int* passed) __QAIC_STUB_ATTRIBUTE {
-   uint32_t _mid = 2;
-   return _stub_method(_handle, _mid, (uint32_t*)&iters, (uint32_t*)total_decodes, (uint32_t*)total_rs_symbol_errors, (uint32_t*)checksum, (uint32_t*)passed);
+   uint32_t _mid = 4;
+   return _stub_method_2(_handle, _mid, (uint32_t*)&iters, (uint32_t*)total_decodes, (uint32_t*)total_rs_symbol_errors, (uint32_t*)checksum, (uint32_t*)passed);
+}
+static __inline int _stub_method_3(remote_handle64 _handle, uint32_t _mid, char* _in0[1], uint32_t _in0Len[1], uint32_t _in1[1], uint32_t _rout2[1]) {
+   int _numIn[1] = {0};
+   remote_arg _pra[3] = {0};
+   uint32_t _primIn[2]= {0};
+   uint32_t _primROut[1]= {0};
+   remote_arg* _praIn = 0;
+   int _nErr = 0;
+   _numIn[0] = 1;
+   _pra[0].buf.pv = (void*)_primIn;
+   _pra[0].buf.nLen = sizeof(_primIn);
+   _pra[(_numIn[0] + 1)].buf.pv = (void*)_primROut;
+   _pra[(_numIn[0] + 1)].buf.nLen = sizeof(_primROut);
+   _COPY(_primIn, 0, _in0Len, 0, 4);
+   _praIn = (_pra + 1);
+   _praIn[0].buf.pv = (void*) _in0[0];
+   _praIn[0].buf.nLen = (1 * (size_t)(_in0Len[0]));
+   _COPY(_primIn, 4, _in1, 0, 4);
+   _TRY_FARF(_nErr, __QAIC_REMOTE(remote_handle64_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 2, 1, 0, 0), _pra));
+   _COPY(_rout2, 0, _primROut, 0, 4);
+   _CATCH_FARF(_nErr) {
+      _QAIC_FARF(RUNTIME_ERROR, "ERROR 0x%x: handle=0x%"PRIx64", scalar=0x%x, method ID=%d: %s failed\n", _nErr , _handle, REMOTE_SCALARS_MAKEX(0, _mid, 2, 1, 0, 0), _mid, __func__);
+   }
+   return _nErr;
+}
+__QAIC_STUB_EXPORT int __QAIC_STUB(hqc_payload_in)(remote_handle64 _handle, const unsigned char* input, int inputLen, int iters, int* checksum) __QAIC_STUB_ATTRIBUTE {
+   uint32_t _mid = 5;
+   return _stub_method_3(_handle, _mid, (char**)&input, (uint32_t*)&inputLen, (uint32_t*)&iters, (uint32_t*)checksum);
+}
+static __inline int _stub_method_4(remote_handle64 _handle, uint32_t _mid, char* _rout0[1], uint32_t _rout0Len[1], uint32_t _in1[1], uint32_t _rout2[1]) {
+   int _numIn[1] = {0};
+   remote_arg _pra[3] = {0};
+   uint32_t _primIn[2]= {0};
+   uint32_t _primROut[1]= {0};
+   remote_arg* _praIn = 0;
+   remote_arg* _praROut = 0;
+   int _nErr = 0;
+   _numIn[0] = 0;
+   _pra[0].buf.pv = (void*)_primIn;
+   _pra[0].buf.nLen = sizeof(_primIn);
+   _pra[(_numIn[0] + 1)].buf.pv = (void*)_primROut;
+   _pra[(_numIn[0] + 1)].buf.nLen = sizeof(_primROut);
+   _COPY(_primIn, 0, _rout0Len, 0, 4);
+   _praIn = (_pra + 1);
+   _praROut = (_praIn + _numIn[0] + 1);
+   _praROut[0].buf.pv = _rout0[0];
+   _praROut[0].buf.nLen = (1 * (size_t)(_rout0Len[0]));
+   _COPY(_primIn, 4, _in1, 0, 4);
+   _TRY_FARF(_nErr, __QAIC_REMOTE(remote_handle64_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 1, 2, 0, 0), _pra));
+   _COPY(_rout2, 0, _primROut, 0, 4);
+   _CATCH_FARF(_nErr) {
+      _QAIC_FARF(RUNTIME_ERROR, "ERROR 0x%x: handle=0x%"PRIx64", scalar=0x%x, method ID=%d: %s failed\n", _nErr , _handle, REMOTE_SCALARS_MAKEX(0, _mid, 1, 2, 0, 0), _mid, __func__);
+   }
+   return _nErr;
+}
+__QAIC_STUB_EXPORT int __QAIC_STUB(hqc_payload_out)(remote_handle64 _handle, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_STUB_ATTRIBUTE {
+   uint32_t _mid = 6;
+   return _stub_method_4(_handle, _mid, (char**)&output, (uint32_t*)&outputLen, (uint32_t*)&iters, (uint32_t*)checksum);
+}
+static __inline int _stub_method_5(remote_handle64 _handle, uint32_t _mid, char* _in0[1], uint32_t _in0Len[1], char* _rout1[1], uint32_t _rout1Len[1], uint32_t _in2[1], uint32_t _rout3[1]) {
+   int _numIn[1] = {0};
+   remote_arg _pra[4] = {0};
+   uint32_t _primIn[3]= {0};
+   uint32_t _primROut[1]= {0};
+   remote_arg* _praIn = 0;
+   remote_arg* _praROut = 0;
+   int _nErr = 0;
+   _numIn[0] = 1;
+   _pra[0].buf.pv = (void*)_primIn;
+   _pra[0].buf.nLen = sizeof(_primIn);
+   _pra[(_numIn[0] + 1)].buf.pv = (void*)_primROut;
+   _pra[(_numIn[0] + 1)].buf.nLen = sizeof(_primROut);
+   _COPY(_primIn, 0, _in0Len, 0, 4);
+   _praIn = (_pra + 1);
+   _praIn[0].buf.pv = (void*) _in0[0];
+   _praIn[0].buf.nLen = (1 * (size_t)(_in0Len[0]));
+   _COPY(_primIn, 4, _rout1Len, 0, 4);
+   _praROut = (_praIn + _numIn[0] + 1);
+   _praROut[0].buf.pv = _rout1[0];
+   _praROut[0].buf.nLen = (1 * (size_t)(_rout1Len[0]));
+   _COPY(_primIn, 8, _in2, 0, 4);
+   _TRY_FARF(_nErr, __QAIC_REMOTE(remote_handle64_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 2, 2, 0, 0), _pra));
+   _COPY(_rout3, 0, _primROut, 0, 4);
+   _CATCH_FARF(_nErr) {
+      _QAIC_FARF(RUNTIME_ERROR, "ERROR 0x%x: handle=0x%"PRIx64", scalar=0x%x, method ID=%d: %s failed\n", _nErr , _handle, REMOTE_SCALARS_MAKEX(0, _mid, 2, 2, 0, 0), _mid, __func__);
+   }
+   return _nErr;
+}
+__QAIC_STUB_EXPORT int __QAIC_STUB(hqc_payload_inout)(remote_handle64 _handle, const unsigned char* input, int inputLen, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_STUB_ATTRIBUTE {
+   uint32_t _mid = 7;
+   return _stub_method_5(_handle, _mid, (char**)&input, (uint32_t*)&inputLen, (char**)&output, (uint32_t*)&outputLen, (uint32_t*)&iters, (uint32_t*)checksum);
+}
+static __inline int _stub_method_6(remote_handle64 _handle, uint32_t _mid, char* _in0[1], uint32_t _in0Len[1], char* _rout1[1], uint32_t _rout1Len[1], uint32_t _in2[1], uint32_t _in3[1], uint32_t _in4[1], uint32_t _in5[1], uint32_t _in6[1], uint32_t _rout7[1], uint32_t _rout8[1], uint32_t _rout9[1], uint32_t _rout10[1]) {
+   int _numIn[1] = {0};
+   remote_arg _pra[4] = {0};
+   uint32_t _primIn[7]= {0};
+   uint32_t _primROut[4]= {0};
+   remote_arg* _praIn = 0;
+   remote_arg* _praROut = 0;
+   int _nErr = 0;
+   _numIn[0] = 1;
+   _pra[0].buf.pv = (void*)_primIn;
+   _pra[0].buf.nLen = sizeof(_primIn);
+   _pra[(_numIn[0] + 1)].buf.pv = (void*)_primROut;
+   _pra[(_numIn[0] + 1)].buf.nLen = sizeof(_primROut);
+   _COPY(_primIn, 0, _in0Len, 0, 4);
+   _praIn = (_pra + 1);
+   _praIn[0].buf.pv = (void*) _in0[0];
+   _praIn[0].buf.nLen = (1 * (size_t)(_in0Len[0]));
+   _COPY(_primIn, 4, _rout1Len, 0, 4);
+   _praROut = (_praIn + _numIn[0] + 1);
+   _praROut[0].buf.pv = _rout1[0];
+   _praROut[0].buf.nLen = (1 * (size_t)(_rout1Len[0]));
+   _COPY(_primIn, 8, _in2, 0, 4);
+   _COPY(_primIn, 12, _in3, 0, 4);
+   _COPY(_primIn, 16, _in4, 0, 4);
+   _COPY(_primIn, 20, _in5, 0, 4);
+   _COPY(_primIn, 24, _in6, 0, 4);
+   _TRY_FARF(_nErr, __QAIC_REMOTE(remote_handle64_invoke)(_handle, REMOTE_SCALARS_MAKEX(0, _mid, 2, 2, 0, 0), _pra));
+   _COPY(_rout7, 0, _primROut, 0, 4);
+   _COPY(_rout8, 0, _primROut, 4, 4);
+   _COPY(_rout9, 0, _primROut, 8, 4);
+   _COPY(_rout10, 0, _primROut, 12, 4);
+   _CATCH_FARF(_nErr) {
+      _QAIC_FARF(RUNTIME_ERROR, "ERROR 0x%x: handle=0x%"PRIx64", scalar=0x%x, method ID=%d: %s failed\n", _nErr , _handle, REMOTE_SCALARS_MAKEX(0, _mid, 2, 2, 0, 0), _mid, __func__);
+   }
+   return _nErr;
+}
+__QAIC_STUB_EXPORT int __QAIC_STUB(hqc_decode_buffer_bench)(remote_handle64 _handle, const unsigned char* codewords, int codewordsLen, unsigned char* messages, int messagesLen, int iters, int codeword_count, int codeword_stride, int message_stride, int dsp_mode, int* total_decodes, int* checksum, int* passed, int* mode_status) __QAIC_STUB_ATTRIBUTE {
+   uint32_t _mid = 8;
+   return _stub_method_6(_handle, _mid, (char**)&codewords, (uint32_t*)&codewordsLen, (char**)&messages, (uint32_t*)&messagesLen, (uint32_t*)&iters, (uint32_t*)&codeword_count, (uint32_t*)&codeword_stride, (uint32_t*)&message_stride, (uint32_t*)&dsp_mode, (uint32_t*)total_decodes, (uint32_t*)checksum, (uint32_t*)passed, (uint32_t*)mode_status);
 }
 #ifdef __cplusplus
 }

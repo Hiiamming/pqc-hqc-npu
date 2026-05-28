@@ -3,13 +3,37 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+SHARED_DIR="$ROOT_DIR/shared"
+PROJECT_DIR="${HQC_PROJECT_DIR:-$ROOT_DIR/labs/fastest}"
 HEXAGON_SDK_ROOT="${HEXAGON_SDK_ROOT:-$ROOT_DIR/../tools/hexagon-sdk}"
 
 AARCH64_GCC="${AARCH64_GCC:-aarch64-linux-gnu-gcc}"
 ADB="${ADB:-adb}"
 ANDROID_LIB_DIR="${ANDROID_LIB_DIR:-$SCRIPT_DIR/build/android-bionic-lib64}"
+RPCMEM_INC_DIR="${RPCMEM_INC_DIR:-$HEXAGON_SDK_ROOT/ipc/fastrpc/rpcmem/inc}"
+RPCMEM_LIB="${RPCMEM_LIB:-$HEXAGON_SDK_ROOT/ipc/fastrpc/rpcmem/prebuilt/android_aarch64/rpcmem.a}"
 BUILD_DIR="$SCRIPT_DIR/build"
 GEN_DIR="$SCRIPT_DIR/generated"
+
+HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}"
+case "$HQC_PARAM_LEVEL" in
+    128)
+        PARAM_DIR="hqc-1"
+        FIXTURE_PREFIX="hqc1"
+        ;;
+    192)
+        PARAM_DIR="hqc-3"
+        FIXTURE_PREFIX="hqc3"
+        ;;
+    256)
+        PARAM_DIR="hqc-5"
+        FIXTURE_PREFIX="hqc5"
+        ;;
+    *)
+        echo "ERROR: HQC_PARAM_LEVEL must be 128, 192, or 256" >&2
+        exit 1
+        ;;
+esac
 
 if ! command -v "$AARCH64_GCC" >/dev/null 2>&1 && [ ! -x "$AARCH64_GCC" ]; then
     echo "ERROR: $AARCH64_GCC not found" >&2
@@ -45,7 +69,7 @@ pull_lib_if_missing /system/lib64/liblog.so
 # Build the DSP skel and generated FastRPC files through the normal path. This
 # also builds a Linux/glibc host, which is intentionally overwritten below.
 HEXAGON_ARCH="${HEXAGON_ARCH:-v68}" \
-HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}" \
+HQC_PARAM_LEVEL="$HQC_PARAM_LEVEL" \
 bash "$SCRIPT_DIR/build.sh"
 
 cat > "$BUILD_DIR/android_start.c" <<'EOF_START'
@@ -88,6 +112,12 @@ EOF_START
     -I "$GEN_DIR" \
     -I "$HEXAGON_SDK_ROOT/incs" \
     -I "$HEXAGON_SDK_ROOT/incs/stddef" \
+    -I "$RPCMEM_INC_DIR" \
+    -I "$SHARED_DIR/fixtures" \
+    -I "$SHARED_DIR/src/common" \
+    -I "$SHARED_DIR/src/ref" \
+    -I "$PROJECT_DIR/src/ref" \
+    -I "$PROJECT_DIR/src/ref/$PARAM_DIR" \
     -c "$SCRIPT_DIR/host/main.c" \
     -o "$BUILD_DIR/host_main.android.o"
 
@@ -100,6 +130,17 @@ EOF_START
     -c "$GEN_DIR/hqc_stub.c" \
     -o "$BUILD_DIR/hqc_stub.android.o"
 
+"$AARCH64_GCC" -std=c11 -O2 -Wall -Wextra -fPIC \
+    -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0 \
+    -DHQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}" \
+    -I "$SHARED_DIR/fixtures" \
+    -I "$SHARED_DIR/src/common" \
+    -I "$SHARED_DIR/src/ref" \
+    -I "$PROJECT_DIR/src/ref" \
+    -I "$PROJECT_DIR/src/ref/$PARAM_DIR" \
+    -c "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" \
+    -o "$BUILD_DIR/${FIXTURE_PREFIX}_decode_fixture.android.o"
+
 "$AARCH64_GCC" -nostdlib -pie \
     -Wl,--allow-shlib-undefined \
     -Wl,--dynamic-linker=/system/bin/linker64 \
@@ -111,6 +152,8 @@ EOF_START
     "$BUILD_DIR/android_start.o" \
     "$BUILD_DIR/host_main.android.o" \
     "$BUILD_DIR/hqc_stub.android.o" \
+    "$BUILD_DIR/${FIXTURE_PREFIX}_decode_fixture.android.o" \
+    "$RPCMEM_LIB" \
     -lcdsprpc -lc -ldl -lm -llog \
     -o "$BUILD_DIR/hqc_host"
 

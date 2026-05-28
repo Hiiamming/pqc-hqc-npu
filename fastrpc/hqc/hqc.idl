@@ -1,11 +1,57 @@
 #include "remote.idl"
 
+typedef sequence<octet> byte_buf;
+
 interface hqc : remote_handle64 {
+    long ping(
+        in long iters,
+        rout long checksum
+    );
+
+    long decode_one(
+        rout long rs_symbol_errors,
+        rout long checksum,
+        rout long passed
+    );
+
     long decode_bench(
         in long iters,
         rout long total_decodes,
         rout long total_rs_symbol_errors,
         rout long checksum,
         rout long passed
+    );
+
+    long payload_in(
+        in byte_buf input,
+        in long iters,
+        rout long checksum
+    );
+
+    long payload_out(
+        rout byte_buf output,
+        in long iters,
+        rout long checksum
+    );
+
+    long payload_inout(
+        in byte_buf input,
+        rout byte_buf output,
+        in long iters,
+        rout long checksum
+    );
+
+    long decode_buffer_bench(
+        in byte_buf codewords,
+        rout byte_buf messages,
+        in long iters,
+        in long codeword_count,
+        in long codeword_stride,
+        in long message_stride,
+        in long dsp_mode,
+        rout long total_decodes,
+        rout long checksum,
+        rout long passed,
+        rout long mode_status
     );
 };
