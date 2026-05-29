@@ -1,0 +1,10 @@
+level=256
+repeats=1
+ping_calls=1000
+open_close_calls=20
+payload_calls=1000
+payload_in_bytes=7296
+payload_out_bytes=128
+decode_one_calls=1000
+bench_iters=100
+device_dir=/data/local/tmp/QDC_files/hqc_fastrpc_overhead/hqc256

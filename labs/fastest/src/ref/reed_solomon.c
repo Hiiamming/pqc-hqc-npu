@@ -187,25 +187,31 @@ static inline HVX_Vector __attribute__((always_inline)) gf_mul_scalar_by_vec_hvx
     HVX_Vector avec = Q6_Vh_vsplat_R((int)a);
     HVX_Vector one = Q6_Vh_vsplat_R(1);
     HVX_Vector zero = Q6_V_vzero();
+    HVX_Vector mask7 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, 7), one));
+    HVX_Vector mask6 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, 6), one));
+    HVX_Vector mask5 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, 5), one));
+    HVX_Vector mask4 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, 4), one));
+    HVX_Vector mask3 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, 3), one));
+    HVX_Vector mask2 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, 2), one));
+    HVX_Vector mask1 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, 1), one));
+    HVX_Vector mask0 = Q6_Vh_vsub_VhVh(zero, Q6_V_vand_VV(b, one));
 
-#define GF_MUL_VEC_STEP(bit)                                      \
-    do {                                                          \
-        HVX_Vector bbit = Q6_V_vand_VV(Q6_Vuh_vlsr_VuhR(b, (bit)), one); \
-        HVX_Vector bit_mask = Q6_Vh_vsub_VhVh(zero, bbit);        \
-        acc = gf_xtime_hvx(acc);                                  \
-        acc = Q6_V_vxor_VV(acc, Q6_V_vand_VV(avec, bit_mask));    \
+#define GF_MUL_VEC_APPLY(mask)                                  \
+    do {                                                        \
+        acc = gf_xtime_hvx(acc);                                \
+        acc = Q6_V_vxor_VV(acc, Q6_V_vand_VV(avec, (mask)));    \
     } while (0)
 
-    GF_MUL_VEC_STEP(7);
-    GF_MUL_VEC_STEP(6);
-    GF_MUL_VEC_STEP(5);
-    GF_MUL_VEC_STEP(4);
-    GF_MUL_VEC_STEP(3);
-    GF_MUL_VEC_STEP(2);
-    GF_MUL_VEC_STEP(1);
-    GF_MUL_VEC_STEP(0);
+    GF_MUL_VEC_APPLY(mask7);
+    GF_MUL_VEC_APPLY(mask6);
+    GF_MUL_VEC_APPLY(mask5);
+    GF_MUL_VEC_APPLY(mask4);
+    GF_MUL_VEC_APPLY(mask3);
+    GF_MUL_VEC_APPLY(mask2);
+    GF_MUL_VEC_APPLY(mask1);
+    GF_MUL_VEC_APPLY(mask0);
 
-#undef GF_MUL_VEC_STEP
+#undef GF_MUL_VEC_APPLY
 
     return acc;
 }
