@@ -35,29 +35,36 @@ for f in "$CLANG" "$SIM" "$BOOTER"; do
     fi
 done
 
-if [ ! -f "$SHARED_DIR/fixtures/hqc5_decode_fixture.c" ]; then
-    "$SCRIPT_DIR/gen_hqc5_decode_fixture.sh"
+HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}"
+case "$HQC_PARAM_LEVEL" in
+    128) PARAM_SET=1 ;;
+    192) PARAM_SET=3 ;;
+    256) PARAM_SET=5 ;;
+    *) echo "ERROR: HQC_PARAM_LEVEL must be 128, 192, or 256" >&2; exit 1 ;;
+esac
+if [ ! -f "$SHARED_DIR/fixtures/hqc${PARAM_SET}_decode_fixture.c" ]; then
+    HQC_PARAM_LEVEL="$HQC_PARAM_LEVEL" "$SCRIPT_DIR/gen_decode_fixture.sh"
 fi
 
-STAGE="${HQC5_STAGE:-0}"
-BENCH_ITERS="${HQC5_BENCH_ITERS:-100}"
-OUT="$PROJECT_DIR/build/hqc5_decode_stage_bench_hexagon_stage${STAGE}"
+STAGE="${HQC_STAGE:-0}"
+BENCH_ITERS="${HQC_BENCH_ITERS:-100}"
+OUT="$PROJECT_DIR/build/hqc${PARAM_SET}_decode_stage_bench_hexagon_stage${STAGE}"
 mkdir -p "$(dirname "$OUT")"
 
-echo "=== Compiling HQC-256 stage benchmark for Hexagon CT intrinsic path, stage=$STAGE, iters=$BENCH_ITERS ==="
+echo "=== Compiling HQC-$HQC_PARAM_LEVEL stage benchmark for Hexagon fastest HVX/HMX path, stage=$STAGE, iters=$BENCH_ITERS ==="
 "$CLANG" -O2 -mv75 \
     -ffunction-sections -fdata-sections \
     -mhvx -mhvx-length=128B \
     -mhmx \
     -DARCHV=75 \
-    -DHQC5_STAGE="$STAGE" \
-    -DHQC5_BENCH_ITERS="$BENCH_ITERS" \
+    -DHQC_STAGE="$STAGE" \
+    -DHQC_BENCH_ITERS="$BENCH_ITERS" \
     -I "$SHARED_DIR/fixtures" \
     -I "$SHARED_DIR/src/common" \
     -I "$PROJECT_DIR/src/common" \
     -I "$SHARED_DIR/src/ref" \
     -I "$PROJECT_DIR/src/ref" \
-    -I "$PROJECT_DIR/src/ref/hqc-5" \
+    -I "$PROJECT_DIR/src/ref/hqc-${PARAM_SET}" \
     -I "$H2_INSTALL/include" \
     -I "$H2_KERNEL" \
     -moslib=h2 \
@@ -65,8 +72,8 @@ echo "=== Compiling HQC-256 stage benchmark for Hexagon CT intrinsic path, stage
     -Wl,--section-start=.start=0x02000000 \
     -Wl,--gc-sections \
     -o "$OUT" \
-    "$PROJECT_DIR/demos/hqc5_decode_stage_bench.c" \
-    "$SHARED_DIR/fixtures/hqc5_decode_fixture.c" \
+    "$PROJECT_DIR/demos/hqc${PARAM_SET}_decode_stage_bench.c" \
+    "$SHARED_DIR/fixtures/hqc${PARAM_SET}_decode_fixture.c" \
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \
     "$PROJECT_DIR/src/ref/reed_solomon.c"
