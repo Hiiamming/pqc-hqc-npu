@@ -41,6 +41,7 @@
 #define HQC_BUFFER_MODE_COPY 1
 #define HQC_BUFFER_MODE_L2FETCH 2
 #define HQC_BUFFER_MODE_VTCM 3
+#define HQC_BUFFER_MODE_WORKER_POOL 4
 
 #define HQC_BUFFER_STATUS_OK 0
 #define HQC_BUFFER_STATUS_BAD_ARGS -1
@@ -88,7 +89,7 @@ static void usage(const char *prog)
             "  %s payload-in <malloc|rpcmem-cached|rpcmem-uncached> <bytes> [calls]\n"
             "  %s payload-out <malloc|rpcmem-cached|rpcmem-uncached> <bytes> [calls]\n"
             "  %s payload-inout <malloc|rpcmem-cached|rpcmem-uncached> <in-bytes> <out-bytes> [calls]\n"
-            "  %s buffer-bench <malloc|rpcmem-cached|rpcmem-uncached> <direct|copy|l2fetch|vtcm> [iters] [codeword-count]\n",
+            "  %s buffer-bench <malloc|rpcmem-cached|rpcmem-uncached> <direct|copy|l2fetch|vtcm|worker> [iters] [codeword-count]\n",
             prog,
             prog,
             prog,
@@ -127,6 +128,9 @@ static int parse_dsp_mode(const char *arg)
     }
     if (strcmp(arg, "vtcm") == 0) {
         return HQC_BUFFER_MODE_VTCM;
+    }
+    if (strcmp(arg, "worker") == 0) {
+        return HQC_BUFFER_MODE_WORKER_POOL;
     }
     return -1;
 }

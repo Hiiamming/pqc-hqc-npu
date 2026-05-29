@@ -89,11 +89,13 @@ static void init_rm_expand2_nibble_table(void) {
 
 static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[]);
 static inline void rm_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1);
+static inline void rm_hadamard_two_rows_hvx(HVX_Vector *a0, HVX_Vector *a1, HVX_Vector *b0, HVX_Vector *b1);
 static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v);
 static inline HVX_Vector hvx_reduce_min_h(HVX_Vector v);
 static inline int32_t hvx_lane0_i16(HVX_Vector v);
 static inline int32_t rm_peak_from_hvx_rows(HVX_Vector row0, HVX_Vector row1);
 static inline int32_t rm_decode_one_hvx_fast(rm_codeword_t src[]);
+static inline void rm_decode_two_hvx_fast(uint8_t *message_array, rm_codeword_t *codeArray, size_t i);
 
 static const int16_t rm_half_hadamard_fix[64] __attribute__((aligned(128))) = {
     64 * MULTIPLICITY,
@@ -251,6 +253,42 @@ static inline void rm_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1) {
     *row1 = hi;
 }
 
+static inline void rm_hadamard_two_rows_hvx(HVX_Vector *a0, HVX_Vector *a1, HVX_Vector *b0, HVX_Vector *b1) {
+    HVX_Vector alo = *a0;
+    HVX_Vector ahi = *a1;
+    HVX_Vector blo = *b0;
+    HVX_Vector bhi = *b1;
+
+#define RM_HADAMARD_TWO_PASS()                                  \
+    do {                                                        \
+        HVX_VectorPair adeal = Q6_W_vdeal_VVR(ahi, alo, 2);     \
+        HVX_VectorPair bdeal = Q6_W_vdeal_VVR(bhi, blo, 2);     \
+        HVX_Vector ae = Q6_Vh_vdeal_Vh(Q6_V_lo_W(adeal));       \
+        HVX_Vector be = Q6_Vh_vdeal_Vh(Q6_V_lo_W(bdeal));       \
+        HVX_Vector ao = Q6_Vh_vdeal_Vh(Q6_V_hi_W(adeal));       \
+        HVX_Vector bo = Q6_Vh_vdeal_Vh(Q6_V_hi_W(bdeal));       \
+        alo = Q6_Vh_vadd_VhVh(ae, ao);                          \
+        blo = Q6_Vh_vadd_VhVh(be, bo);                          \
+        ahi = Q6_Vh_vsub_VhVh(ae, ao);                          \
+        bhi = Q6_Vh_vsub_VhVh(be, bo);                          \
+    } while (0)
+
+    RM_HADAMARD_TWO_PASS();
+    RM_HADAMARD_TWO_PASS();
+    RM_HADAMARD_TWO_PASS();
+    RM_HADAMARD_TWO_PASS();
+    RM_HADAMARD_TWO_PASS();
+    RM_HADAMARD_TWO_PASS();
+    RM_HADAMARD_TWO_PASS();
+
+#undef RM_HADAMARD_TWO_PASS
+
+    *a0 = alo;
+    *a1 = ahi;
+    *b0 = blo;
+    *b1 = bhi;
+}
+
 static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v) {
     v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 64));
     v = Q6_Vh_vmax_VhVh(v, Q6_V_vror_VR(v, 32));
@@ -401,6 +439,27 @@ static inline int32_t __attribute__((always_inline)) rm_decode_one_hvx_fast(rm_c
     return rm_peak_from_hvx_rows(row0, row1);
 }
 
+static inline void __attribute__((always_inline)) rm_decode_two_hvx_fast(uint8_t *message_array, rm_codeword_t *codeArray, size_t i) {
+    rm_expanded_cdw expanded0 __attribute__((aligned(128)));
+    rm_expanded_cdw expanded1 __attribute__((aligned(128)));
+
+    expand_rm_copies_fast((uint64_t *)expanded0, &codeArray[i * MULTIPLICITY]);
+    expand_rm_copies_fast((uint64_t *)expanded1, &codeArray[(i + 1) * MULTIPLICITY]);
+
+    HVX_Vector row00 = *(const HVX_Vector *)&expanded0[0];
+    HVX_Vector row01 = *(const HVX_Vector *)&expanded0[64];
+    HVX_Vector row10 = *(const HVX_Vector *)&expanded1[0];
+    HVX_Vector row11 = *(const HVX_Vector *)&expanded1[64];
+    rm_hadamard_two_rows_hvx(&row00, &row01, &row10, &row11);
+
+    HVX_Vector fix = *(const HVX_Vector *)rm_half_hadamard_fix;
+    row00 = Q6_Vh_vsub_VhVh(row00, fix);
+    row10 = Q6_Vh_vsub_VhVh(row10, fix);
+
+    message_array[i] = rm_peak_from_hvx_rows(row00, row01);
+    message_array[i + 1] = rm_peak_from_hvx_rows(row10, row11);
+}
+
 /**
  * @brief Encodes the received word
  *
@@ -439,7 +498,11 @@ void reed_muller_encode(uint64_t *cdw, const uint64_t *msg) {
 void reed_muller_decode(uint64_t *msg, const uint64_t *cdw) {
     uint8_t *message_array = (uint8_t *)msg;
     rm_codeword_t *codeArray = (rm_codeword_t *)cdw;
-    for (size_t i = 0; i < VEC_N1_SIZE_BYTES; i++) {
+    size_t i = 0;
+    for (; i + 1 < VEC_N1_SIZE_BYTES; i += 2) {
+        rm_decode_two_hvx_fast(message_array, codeArray, i);
+    }
+    for (; i < VEC_N1_SIZE_BYTES; i++) {
         message_array[i] = rm_decode_one_hvx_fast(&codeArray[i * MULTIPLICITY]);
     }
 }

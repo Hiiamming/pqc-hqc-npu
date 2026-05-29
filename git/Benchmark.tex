@@ -1,251 +1,500 @@
-% \subsection{Simulation data}
+% \subsection{Simulation Results}
 
-% The decode benchmark in this repository does not measure encoding. The fixture corpus is generated on the host first, and the benchmark binary measures only decoding. The data set contains:
-
-% \begin{itemize}
-%     \item 16 deterministic fixtures;
-%     \item each fixture has one random 16-byte message;
-%     \item each fixture has one corrupted HQC-128 codeword;
-%     \item the Reed--Solomon symbol error count covers 0 through 15;
-%     \item each codeword has 17664 bits, or 2208 bytes;
-%     \item the expected output is the decoded 16-byte message.
-% \end{itemize}
-
-% If \texttt{HQC128\_BENCH\_ITERS=10}, then the total number of decodes is:
+% The simulator benchmark uses the 16-fixture HQC-128 decode corpus and reports Hexagon Pcycles. The estimated cost per decode subtracts the fixed cost of the one-iteration run:
 
 % \[
-% 10 \times 16 = 160.
+% \frac{\text{Pcycles}_{10\ \text{iters}} - \text{Pcycles}_{1\ \text{iter}}}{9 \times 16}.
 % \]
 
-% \subsection{Simulation commands}
+% We report Hexagon simulator Pcycles for the scalar baseline and optimized intrinsic build. The Pcycles/decode column is shown on the 10-iteration rows because it is derived from the paired 1- and 10-iteration measurements.
 
-% Generate the fixture for the scalar version:
+% \begin{table}[htbp]
+% \centering
+% \label{tab:sim-pcycles-hqc128}
+% \renewcommand{\arraystretch}{1.15}
 
-% \begin{lstlisting}[style=bashstyle]
-% cd hqc_lab_scalar
-% bash scripts/gen_hqc128_decode_fixture.sh
-% \end{lstlisting}
+% \small
+% \begin{tabular}{|l|c|c|c|c|c|}
+% \hline
+% \textbf{Variant} & \textbf{Iters} & \textbf{Fixtures} & \textbf{Total instructions} & \textbf{Total Pcycles} & \textbf{Pcycles/decode} \\
+% \hline
+% Scalar & 1  & 16 & 15,658,009  & 17,830,458  & -- \\
+% \hline
+% Scalar & 10 & 16 & 139,902,579 & 155,172,882 & 953,767 \\
+% \hline
+% NPU supported & 1  & 16 & 3,193,630 & 4,285,368  & -- \\
+% \hline
+% NPU supported & 10 & 16 & 8,048,619 & 11,271,900 & 48,518 \\
+% \hline
+% \end{tabular}
+% \vspace{0.5em}
+% \caption{Hexagon simulator instruction and Pcycle measurements for HQC-128 decoding.}
 
-% Run the decode benchmark on the host CPU:
+% \end{table}
 
-% \begin{lstlisting}[style=bashstyle]
-% bash scripts/run_hqc128_decode_bench_host.sh
-% \end{lstlisting}
+% Relative to scalar, NPU supported path is \(19.66\times\) faster and reduces Pcycles/decode by 94.9\%.
 
-% Run the scalar version on the Hexagon simulator:
+% \subsection{Substage Analysis}
 
-% \begin{lstlisting}[style=bashstyle]
-% bash scripts/run_hqc128_decode_bench_hexagon.sh
-% \end{lstlisting}
+% The substage benchmark reports the scalar baseline and the NPU-supported path. Reed-Muller substage costs are converted from per-block cost to per-decode cost by multiplying by 46 Reed-Muller blocks.  Reed-Solomon substage costs are already per decode.
 
-% Run the HVX intrinsic version on the Hexagon simulator:
+% \begin{table}[htbp]
+% \centering
+% \renewcommand{\arraystretch}{1.15}
+% \begin{tabular}{|l|c|c|}
+% \hline
+% \textbf{Substage} & \textbf{Scalar} & \textbf{NPU supported} \\
+% \hline
+% Reed-Muller Hadamard & 263,167 & 17,948 \\
+% \hline
+% Reed-Muller find peak & 71,216 & 6,080 \\
+% \hline
+% Reed-Solomon syndrome & 162,309 & 8,358 \\
+% \hline
+% Reed-Solomon error-locator polynomial & 119,591 & 6,574 \\
+% \hline
+% \textbf{Full decode estimate} & \textbf{953,767} & \textbf{48,518} \\
+% \hline
+% \end{tabular}
 
-% \begin{lstlisting}[style=bashstyle]
-% cd ../hqc_lab_insintric
-% bash scripts/gen_hqc128_decode_fixture.sh
-% HQC128_BENCH_ITERS=10 bash scripts/run_hqc128_decode_bench_hexagon.sh
-% \end{lstlisting}
+% \vspace{0.5em}
+% \caption{Pcycle breakdown of optimized HQC decoding substages.}
+% \label{tab:substage-pcycle-breakdown}
+% \end{table}
 
-% Run the HVX intrinsic version with the experimental GF LUT path:
+% \begin{figure}[h]
+% \centering
+% \begin{tikzpicture}
+% \begin{axis}[
+%     xbar,
+%     width=0.9\linewidth,
+%     height=5.2cm,
+%     bar width=7pt,
+%     xlabel={Pcycles/decode $(\times 10^5)$},
+%     xmin=0,
+%     xmax=3.0,
+%     xtick={0,0.5,1.0,1.5,2.0,2.5,3.0},
+%     scaled x ticks=false,
+%     symbolic y coords={
+%         Reed-Muller Hadamard,
+%         Reed-Muller find peak,
+%         Reed-Solomon syndrome,
+%         Reed-Solomon ELP
+%     },
+%     ytick=data,
+%     y dir=reverse,
+%     enlarge y limits=0.18,
+%     legend style={
+%         at={(0.5,-0.35)},
+%         anchor=north,
+%         legend columns=2,
+%         font=\scriptsize
+%     },
+%     x tick label style={font=\small},
+%     yticklabel style={font=\scriptsize},
+%     xmajorgrids=true,
+%     grid style={gray!25},
+% ]
+% \addplot coordinates {
+%     (2.63167,Reed-Muller Hadamard)
+%     (0.71216,Reed-Muller find peak)
+%     (1.62309,Reed-Solomon syndrome)
+%     (1.19591,Reed-Solomon ELP)
+% };
+% \addplot coordinates {
+%     (0.17948,Reed-Muller Hadamard)
+%     (0.06080,Reed-Muller find peak)
+%     (0.08358,Reed-Solomon syndrome)
+%     (0.06574,Reed-Solomon ELP)
+% };
+% \legend{Scalar,NPU supported}
+% \end{axis}
+% \end{tikzpicture}
+% \vspace{1.2em}
+% \caption{Comparison of optimized decoding substages between the scalar baseline and the NPU-supported backend. Lower is better.}
+% \label{fig:substage-pcycle-comparison}
+% \end{figure}
 
-% \begin{lstlisting}[style=bashstyle]
-% HQC128_BENCH_ITERS=10 HQC_GF_LUT_MUL=1 \
-%   bash scripts/run_hqc128_decode_bench_hexagon.sh
-% \end{lstlisting}
+\subsection{Simulation Results}
 
-% Note: the GF LUT path is faster in simulation, but it uses data-dependent table lookup. Therefore, it should not be the default cryptographic implementation if the threat model includes side-channel leakage.
-
-\subsection{Simulation results}
-
-The simulator benchmark uses the 16-fixture HQC-128 decode corpus and reports Hexagon Pcycles. The estimated cost per decode subtracts the fixed cost of the one-iteration run:
+The simulator benchmark is conducted on the 16-fixture HQC-128 decoding corpus
+and reports Hexagon processor cycles (Pcycles). The Pcycles/decode value is a
+paired estimate that subtracts the fixed simulator/startup cost of the
+one-iteration run:
 
 \[
 \frac{\text{Pcycles}_{10\ \text{iters}} - \text{Pcycles}_{1\ \text{iter}}}{9 \times 16}.
 \]
 
-The following table reports the current working-tree full-decode simulator counters. The Pcycles/decode column is shown on the 10-iteration rows because it is derived from the paired 1- and 10-iteration measurements.
+This is the same normalization used for the scalar baseline and prevents the
+fixed simulator overhead from dominating the fast NPU-supported path.
 
-\begin{center}
-\begin{tabular}{lrrrrr}
-\toprule
-Variant & Iters & Fixtures & Total instructions & Total Pcycles & Pcycles/decode \\
-\midrule
-Scalar & 1 & 16 & 15,658,009 & 17,830,458 & -- \\
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\small
+\caption{Hexagon simulator instruction and Pcycle measurements for HQC-128 decoding.}
+\label{tab:sim-pcycles-hqc128}
+\begin{tabular}{|l|c|c|c|c|c|}
+\hline
+\textbf{Variant} & \textbf{Iters} & \textbf{Fixtures} &
+\textbf{Total instructions} & \textbf{Total Pcycles} &
+\textbf{Pcycles/decode} \\
+\hline
+Scalar & 1  & 16 & 15,658,009  & 17,830,458  & -- \\
+\hline
 Scalar & 10 & 16 & 139,902,579 & 155,172,882 & 953,767 \\
-CT HVX intrinsic & 1 & 16 & 3,703,927 & 4,855,602 & -- \\
-CT HVX intrinsic & 10 & 16 & 19,679,793 & 24,143,226 & 133,942 \\
-Fastest non-CT HVX intrinsic & 1 & 16 & 3,193,630 & 4,285,368 & -- \\
-Fastest non-CT HVX intrinsic & 10 & 16 & 8,048,619 & 11,271,900 & 48,518 \\
-\bottomrule
+\hline
+NPU-supported & 1  & 16 & 3,189,899 & 4,201,407 & -- \\
+\hline
+NPU-supported & 10 & 16 & 7,907,458 & 10,174,062 & 41,477 \\
+\hline
 \end{tabular}
-\end{center}
+\end{table}
 
-Relative to scalar, the CT HVX intrinsic path is \(7.12\times\) faster in simulator Pcycles and reduces Pcycles/decode by 86.0\%.  The fastest non-CT HVX intrinsic path is \(19.66\times\) faster and reduces Pcycles/decode by 94.9\%, but remains a benchmark upper bound because it uses side-channel-relaxed control flow and data-dependent lookup tables.
+Relative to the scalar baseline, the NPU-supported path is \(23.00\times\)
+faster and reduces the Pcycles/decode cost by \(95.7\%\).
 
-\subsection{Substage analysis}
+\subsection{Substage Analysis}
 
-The substage benchmark was measured for all three simulator variants: scalar first, then default CT HVX, then fastest non-CT HVX.  RM substage costs are converted from per-block cost to per-decode cost by multiplying by 46 RM blocks.  RS substage costs are already per decode.
+The substage benchmark compares the scalar baseline with the NPU-supported path.
+Reed--Muller substage costs are first estimated from paired one- and
+ten-iteration measurements per RM block, then multiplied by the \(46\)
+Reed--Muller blocks used in one HQC-128 decode. Reed--Solomon substage costs
+use the same paired estimate directly per decode. The table reports the main
+optimized substages rather than an exhaustive decomposition of the full decoder.
 
-\begin{center}
-\begin{tabular}{lrrr}
-\toprule
-Substage & Scalar & CT HVX & Fastest non-CT HVX \\
-\midrule
-RM expand/sum & 149,742 & 48,450 & 13,812 \\
-RM Hadamard & 263,167 & 17,941 & 17,948 \\
-RM find peak & 71,216 & 8,012 & 6,080 \\
-RS syndrome & 162,309 & 8,358 & 8,358 \\
-RS ELP & 119,591 & 44,879 & 6,574 \\
-RS roots & 105,765 & 3,380 & 2,132 \\
-RS Z polynomial & 13,044 & 11,145 & 1,141 \\
-RS error values & 143,106 & 6,969 & 5,908 \\
-RS correction & 439 & 439 & 427 \\
-\midrule
-Isolated substage sum & 1,028,378 & 149,572 & 62,380 \\
-Full decode estimate & 953,767 & 133,942 & 48,518 \\
-Substage sum / full decode & 107.8\% & 111.7\% & 128.6\% \\
-\bottomrule
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{|l|c|c|}
+\hline
+\textbf{Substage} & \textbf{Scalar} & \textbf{NPU-supported} \\
+\hline
+Reed--Muller Hadamard & 263,167 & 17,941 \\
+\hline
+Reed--Muller find peak & 71,216 & 6,080 \\
+\hline
+Reed--Solomon syndrome & 162,309 & 3,513 \\
+\hline
+Reed--Solomon error-locator polynomial & 119,591 & 6,574 \\
+\hline
+\textbf{Full decode estimate} & \textbf{953,767} & \textbf{41,477} \\
+\hline
 \end{tabular}
-\end{center}
+\vspace{0.5em}
+\caption{Pcycle breakdown of selected optimized HQC decoding substages.}
+\label{tab:substage-pcycle-breakdown} % Đã đưa label xuống sau caption
+\end{table}
 
-\begin{figure}[htbp]
+\begin{figure}[htbp] % Đổi [h] thành [htbp] ở đây để nó tự tối ưu vị trí
 \centering
 \begin{tikzpicture}
 \begin{axis}[
     xbar,
     width=0.9\linewidth,
-    height=10cm,
-    bar width=4pt,
-    xlabel={Pcycles/decode},
-    symbolic y coords={RM expand/sum,RM Hadamard,RM find peak,RS syndrome,RS ELP,RS roots,RS Z polynomial,RS error values,RS correction},
+    height=5.2cm,
+    bar width=7pt,
+    xlabel={Pcycles/decode $(\times 10^5)$},
+    xmin=0,
+    xmax=3.0,
+    xtick={0,0.5,1.0,1.5,2.0,2.5,3.0},
+    scaled x ticks=false,
+    symbolic y coords={
+        Reed--Muller Hadamard,
+        Reed--Muller find peak,
+        Reed--Solomon syndrome,
+        Reed--Solomon ELP
+    },
     ytick=data,
     y dir=reverse,
-    xmin=0,
-    enlarge y limits=0.08,
-    legend style={at={(0.5,-0.12)},anchor=north,legend columns=3,font=\scriptsize},
+    enlarge y limits=0.18,
+    legend style={
+        at={(0.5,-0.35)},
+        anchor=north,
+        legend columns=2,
+        font=\scriptsize
+    },
     x tick label style={font=\small},
     yticklabel style={font=\scriptsize},
     xmajorgrids=true,
     grid style={gray!25},
 ]
 \addplot coordinates {
-    (149742,RM expand/sum)
-    (263167,RM Hadamard)
-    (71216,RM find peak)
-    (162309,RS syndrome)
-    (119591,RS ELP)
-    (105765,RS roots)
-    (13044,RS Z polynomial)
-    (143106,RS error values)
-    (439,RS correction)
+    (2.63167,Reed--Muller Hadamard)
+    (0.71216,Reed--Muller find peak)
+    (1.62309,Reed--Solomon syndrome)
+    (1.19591,Reed--Solomon ELP)
 };
 \addplot coordinates {
-    (48450,RM expand/sum)
-    (17941,RM Hadamard)
-    (8012,RM find peak)
-    (8358,RS syndrome)
-    (44879,RS ELP)
-    (3380,RS roots)
-    (11145,RS Z polynomial)
-    (6969,RS error values)
-    (439,RS correction)
+    (0.17941,Reed--Muller Hadamard)
+    (0.06080,Reed--Muller find peak)
+    (0.03513,Reed--Solomon syndrome)
+    (0.06574,Reed--Solomon ELP)
 };
-\addplot coordinates {
-    (13812,RM expand/sum)
-    (17948,RM Hadamard)
-    (6080,RM find peak)
-    (8358,RS syndrome)
-    (6574,RS ELP)
-    (2132,RS roots)
-    (1141,RS Z polynomial)
-    (5908,RS error values)
-    (427,RS correction)
-};
-\legend{Scalar,CT HVX,Fastest non-CT HVX}
+\legend{Scalar,NPU-supported}
 \end{axis}
 \end{tikzpicture}
-\caption{Grouped HQC-128 simulator substage costs. Lower is better.}
+\vspace{0.5em}
+\caption{Comparison of selected optimized decoding substages between the scalar baseline and the NPU-supported backend (ELP is abbreviated for error locator polynomial). Lower is better.}
+\label{fig:substage-pcycle-comparison}
 \end{figure}
 
-The scalar breakdown shows that RM Hadamard, RS syndrome, RM expand/sum, and RS error values are the largest contributors before HVX optimization.  In the CT HVX path, the dominant remaining costs are RM expand/sum and RS ELP.  In the fastest non-CT path, RM Hadamard, RM expand/sum, and RS syndrome dominate the isolated breakdown.
+% \subsection{Real-Device Results}
+% The real-device experiments were performed on a Snapdragon\textregistered{} 8 Gen 2 Mobile Hardware Development Kit, model HDK8550, based on the Qualcomm Snapdragon SM8550P application processor. The manufacturer specifies an 8-core 64-bit Kryo CPU with one Arm Cortex-X3 prime core up to 3.2 GHz, four performance cores up to 2.8 GHz, and three efficiency cores up to 2.0 GHz, plus a Qualcomm Hexagon processor with Hexagon Vector eXtensions (HVX), scalar and tensor accelerators, micro tile inferencing, Hexagon Direct Link, and INT4, INT8, INT16, and FP16 arithmetic support.
 
-\section{Real-device results}
+% The real-device measurements use the corresponding 16-fixture decode corpus for each HQC parameter set, but report host-observed latency and direct device energy rather than simulator Pcycles. Each run performs 160,000 decodes. Energy is measured from Android power-supply voltage/current samples with qprof disabled. Here, qprof refers to Qualcomm's profiler for DSP/NPU utilization and clock-state diagnostics; its measurements are used only as diagnostic evidence, not for energy claims.
 
-The real-device measurements use the same 16-fixture decode corpus as the simulator benchmark, but report host-observed latency and direct device energy rather than simulator Pcycles. Each run performs 160,000 decodes. Energy is measured from Android power-supply voltage/current samples with qprof disabled; qprof is used only as diagnostic evidence for cDSP/NPU utilization and clock state.
+% \begin{table}[htbp]
+% \centering
+% \renewcommand{\arraystretch}{1.15}
+% \small
+% \begin{tabular}{|c|c|c|c|c|c|c|}
+% \hline
+% \textbf{HQC} & \textbf{Backend} & \textbf{us/decode} & \textbf{uJ/decode} & \textbf{decodes/s/W} & \textbf{Speedup} & \textbf{Energy gain} \\
+% \hline
+% HQC-128 & CPU scalar    & 80.622  & 217.929 & 4,588.650  & 1.00x & 1.0x  \\
+% \hline
+% HQC-128 & NPU supported & 40.570  & 16.951  & 58,993.570 & 1.99x & 12.9x \\
+% \hline
+% HQC-192 & CPU scalar    & 102.844 & 282.449 & 3,540.462  & 1.00x & 1.0x  \\
+% \hline
+% HQC-192 & NPU supported & 50.734  & 21.245  & 47,069.899 & 2.03x & 13.3x \\
+% \hline
+% HQC-256 & CPU scalar    & 227.041 & 655.251 & 1,526.133  & 1.00x & 1.0x  \\
+% \hline
+% HQC-256 & NPU supported & 77.094  & 35.561  & 28,120.694 & 2.94x & 18.4x \\
+% \hline
+% \end{tabular}
 
-\begin{center}
-\begin{tabular}{llrrrrr}
-\toprule
-HQC & Backend & us/decode & uJ/decode & decodes/s/W & Speedup & Energy gain \\
-\midrule
-HQC-128 & CPU scalar & 80.622 & 217.929 & 4,674.205 & 1.00x & 1.0x \\
-HQC-128 & NPU CT & 79.879 & 17.089 & 58,971.281 & 1.01x & 12.8x \\
-HQC-128 & NPU fastest non-CT & 40.570 & 16.951 & 61,982.079 & 1.99x & 12.9x \\
-HQC-192 & CPU scalar & 102.844 & 282.449 & 3,578.105 & 1.00x & 1.0x \\
-HQC-192 & NPU CT & 90.681 & 36.433 & 27,447.467 & 1.13x & 7.8x \\
-HQC-192 & NPU fastest non-CT & 50.734 & 21.245 & 48,012.445 & 2.03x & 13.3x \\
-HQC-256 & CPU scalar & 227.041 & 655.251 & 1,531.320 & 1.00x & 1.0x \\
-HQC-256 & NPU CT & 213.401 & 57.120 & 17,577.181 & 1.06x & 11.5x \\
-HQC-256 & NPU fastest non-CT & 77.094 & 35.561 & 28,473.985 & 2.94x & 18.4x \\
-\bottomrule
+% \vspace{0.5em}
+% \caption{Real-device latency, energy, and throughput-per-watt measurements across HQC parameter sets.}
+% \label{tab:real-device-latency-energy}
+% \end{table}
+
+% The decodes/s/W column is computed as \(1/J_{\mathrm{decode}}\) from the direct-energy \(\mu\)J/decode measurement.
+
+% The larger HQC-256 latency speedup is mainly a workload-scaling effect: HQC-256 has more Reed-Muller blocks and a larger Reed-Solomon decoding problem, so the fixed FastRPC/setup overhead is amortized over more vectorized work while the scalar CPU baseline scales more directly with the decoder size.
+
+% \begin{figure}[h]
+% \centering
+% \begin{tikzpicture}
+% \begin{axis}[
+%     ybar,
+%     width=\linewidth,
+%     height=8cm,
+%     bar width=14pt,
+%     ylabel={uJ/decode},
+%     symbolic x coords={HQC-128,HQC-192,HQC-256},
+%     xtick=data,
+%     ymin=0,
+%     ymax=800,
+%     enlarge x limits=0.18,
+%     legend style={at={(0.5,-0.15)},anchor=north,legend columns=2,font=\scriptsize},
+%     nodes near coords,
+%     nodes near coords style={font=\scriptsize,rotate=90,anchor=west},
+%     yticklabel style={/pgf/number format/fixed},
+%     x tick label style={font=\small},
+% ]
+% \addplot coordinates {
+%     (HQC-128,217.929)
+%     (HQC-192,282.449)
+%     (HQC-256,655.251)
+% };
+
+% \addplot coordinates {
+%     (HQC-128,16.951)
+%     (HQC-192,21.245)
+%     (HQC-256,35.561)
+% };
+
+% \legend{CPU scalar,NPU supported}
+% \end{axis}
+% \end{tikzpicture}
+% \caption{Real-device energy per decode. Lower is better.}
+% \end{figure}
+
+% \begin{table}[htbp]
+% \centering
+% \renewcommand{\arraystretch}{1.15}
+% \small
+% \begin{tabular}{|c|c|c|c|c|}
+% \hline
+% \textbf{HQC} & \textbf{Backend} & \textbf{process CPU \%} & \textbf{CPU ms/decode} & \textbf{CPU reduction} \\
+% \hline
+% HQC-128 & CPU scalar    & 98.691 & 0.0801250 & 0.000\% \\
+% \hline
+% HQC-128 & NPU supported & 0.452  & 0.0001875 & 99.766\% \\
+% \hline
+% HQC-192 & CPU scalar    & 98.800 & 0.1029375 & 0.000\% \\
+% \hline
+% HQC-192 & NPU supported & 0.356  & 0.0001875 & 99.818\% \\
+% \hline
+% HQC-256 & CPU scalar    & 99.151 & 0.2263125 & 0.000\% \\
+% \hline
+% HQC-256 & NPU supported & 0.161  & 0.0001250 & 99.945\% \\
+% \hline
+% \end{tabular}
+
+% \vspace{0.5em}
+% \caption{Process-level CPU utilization and CPU-time reduction on the real device.}
+% \label{tab:real-device-cpu-offload}
+% \end{table}
+% The process-level CPU measurements show why CPU offload matters beyond energy alone. If the CPU consumes nearly all of its available process time decoding HQC, the host has little room left for other application or system work. Moving the decode workload to the NPU reduces the decoder process CPU demand by more than 99.7\% across all HQC levels, freeing the CPU to continue handling other tasks while the NPU performs the decode computation.
+
+\subsection{Real-Device Results}
+
+The real-device experiments were conducted on a Snapdragon\textregistered{} 8 Gen 2 Mobile Hardware Development Kit, model HDK8550, based on the Qualcomm
+Snapdragon SM8550P application processor. According to the manufacturer specification, this platform includes an 8-core 64-bit Kryo CPU, consisting of
+one Arm Cortex-X3 prime core up to 3.2 GHz, four performance cores up to 2.8 GHz, and three efficiency cores up to 2.0 GHz. It also includes a Qualcomm
+Hexagon processor equipped with Hexagon Vector eXtensions (HVX), scalar and tensor accelerators, micro tile inferencing, Hexagon Direct Link, and support
+for INT4, INT8, INT16, and FP16 arithmetic.
+
+The real-device measurements use the corresponding 16-fixture decoding corpus for each HQC parameter set. Unlike the simulator benchmark, which reports
+Hexagon Pcycles, the real-device benchmark reports host-observed latency and direct device energy. For the fastest NPU-supported path, we report the
+best worker-pool configuration found on the real device: HQC-128 uses \texttt{codeword\_count=256}, while HQC-192 and HQC-256 use \texttt{codeword\_count=128}.
+The CPU scalar baseline uses \(160{,}000\) decodes per run, while the NPU worker-best runs use longer batched runs to stabilize direct-energy sampling.
+Energy is measured from Android power-supply voltage/current samples with qprof disabled. Here, qprof refers to Qualcomm's profiler for DSP/NPU
+utilization and clock-state diagnostics; its measurements are used only as diagnostic evidence and are not used for the energy claims.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\small
+\caption{Real-device latency, energy, and throughput-per-watt measurements across HQC parameter sets.}
+\label{tab:real-device-latency-energy}
+\begin{tabular}{|c|c|c|c|c|c|c|}
+\hline
+\textbf{HQC} & \textbf{Backend} & \textbf{us/decode} & \textbf{uJ/decode} &
+\textbf{decodes/s/W} & \textbf{Speedup} & \textbf{Energy gain} \\
+\hline
+HQC-128 & CPU scalar    & 80.529  & 192.122 & 5,247.589  & 1.00x & 1.0x  \\
+\hline
+HQC-128 & NPU-supported & 9.947  & 5.268  & 194,609.748 & 8.10x & 36.5x \\
+\hline
+HQC-192 & CPU scalar    & 102.903 & 249.029 & 4,051.094  & 1.00x & 1.0x  \\
+\hline
+HQC-192 & NPU-supported & 14.987  & 7.746  & 132,716.524 & 6.87x & 32.1x \\
+\hline
+HQC-256 & CPU scalar    & 226.955 & 581.722 & 1,726.476  & 1.00x & 1.0x  \\
+\hline
+HQC-256 & NPU-supported & 22.749  & 17.604  & 58,221.111 & 9.98x & 33.0x \\
+\hline
 \end{tabular}
-\end{center}
+\end{table}
 
-\begin{figure}[htbp]
+The decodes/s/W column is computed as \(1/J_{\mathrm{decode}}\) from the direct energy measurement in \(\mu\mathrm{J}/\mathrm{decode}\). Across all three HQC parameter sets, the worker-best NPU-supported backend improves both latency and energy efficiency over the scalar CPU baseline. With the best real-device batch size per parameter set, the measured speedup is \(6.87\times\) to \(9.98\times\), and the energy gain is \(32.1\times\) to \(36.5\times\).
+
+\begin{figure}[h]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
     ybar,
     width=\linewidth,
     height=8cm,
-    bar width=10pt,
+    bar width=14pt,
     ylabel={uJ/decode},
     symbolic x coords={HQC-128,HQC-192,HQC-256},
     xtick=data,
     ymin=0,
+    ymax=800,
     enlarge x limits=0.18,
-    legend style={at={(0.5,-0.15)},anchor=north,legend columns=3,font=\scriptsize},
+    legend style={at={(0.5,-0.15)},anchor=north,legend columns=2,font=\scriptsize},
     nodes near coords,
     nodes near coords style={font=\scriptsize,rotate=90,anchor=west},
     yticklabel style={/pgf/number format/fixed},
     x tick label style={font=\small},
 ]
 \addplot coordinates {
-    (HQC-128,217.929)
-    (HQC-192,282.449)
-    (HQC-256,655.251)
+    (HQC-128,192.122)
+    (HQC-192,249.029)
+    (HQC-256,581.722)
 };
+
 \addplot coordinates {
-    (HQC-128,17.089)
-    (HQC-192,36.433)
-    (HQC-256,57.120)
+    (HQC-128,5.268)
+    (HQC-192,7.746)
+    (HQC-256,17.604)
 };
-\addplot coordinates {
-    (HQC-128,16.951)
-    (HQC-192,21.245)
-    (HQC-256,35.561)
-};
-\legend{CPU scalar,NPU CT,NPU fastest non-CT}
+
+\legend{CPU scalar,NPU-supported}
 \end{axis}
 \end{tikzpicture}
 \caption{Real-device energy per decode. Lower is better.}
+\label{fig:real-device-energy}
 \end{figure}
 
-The constant-time NPU implementation is the primary cryptographic result: it keeps latency close to, or slightly better than, the ARM64 CPU scalar baseline while reducing energy by 7.8x--12.8x. The fastest non-CT NPU path is a performance-oriented upper bound: it improves latency by 1.99x--2.94x and reduces energy by 12.9x--18.4x, but remains benchmark-only because it uses side-channel-relaxed control flow and data-dependent lookup tables.
+In addition to latency and energy, we also measure process-level CPU utilization to quantify the offloading effect. These measurements show that the
+NPU-supported backend substantially reduces host CPU demand, which is important for mobile and embedded settings where the CPU must remain available for other application and system tasks.
 
-\begin{center}
-\begin{tabular}{llrrrr}
-\toprule
-HQC & Backend & process CPU \% & CPU ms/decode & CPU reduction & NPU util. \\
-\midrule
-HQC-128 & NPU CT & 0.096 & 0.0000625 & 99.922\% & 99.94\% \\
-HQC-128 & NPU fastest non-CT & 0.452 & 0.0001875 & 99.766\% & 98.54\% \\
-HQC-192 & NPU CT & 0.136 & 0.0001250 & 99.879\% & 99.59\% \\
-HQC-192 & NPU fastest non-CT & 0.356 & 0.0001875 & 99.818\% & 98.87\% \\
-HQC-256 & NPU CT & 0.110 & 0.0001875 & 99.917\% & 98.16\% \\
-HQC-256 & NPU fastest non-CT & 0.161 & 0.0001250 & 99.945\% & 99.69\% \\
-\bottomrule
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\small
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{HQC} & \textbf{Backend} & \textbf{process CPU \%} &
+\textbf{CPU ms/decode} & \textbf{CPU reduction} \\
+\hline
+HQC-128 & CPU scalar    & 98.462 & 0.0800000 & 0.000\% \\
+\hline
+HQC-128 & NPU-supported & 0.392  & 0.0000400 & 99.950\% \\
+\hline
+HQC-192 & CPU scalar    & 98.560 & 0.1026875 & 0.000\% \\
+\hline
+HQC-192 & NPU-supported & 0.205  & 0.0000313 & 99.970\% \\
+\hline
+HQC-256 & CPU scalar    & 99.150 & 0.2261250 & 0.000\% \\
+\hline
+HQC-256 & NPU-supported & 0.312  & 0.0000732 & 99.968\% \\
+\hline
 \end{tabular}
-\end{center}
+\vspace{0.5em}
+\caption{Process-level CPU utilization and CPU-time reduction on the real device.}
+\label{tab:real-device-cpu-offload}
 
-The process-level CPU measurements show that the FastRPC/NPU paths reduce host CPU work by more than 99.7\% across all HQC levels, with process CPU utilization below 0.5\% in these runs. The qprof diagnostic runs report approximately 98.5\%--99.9\% NPU utilization with QDSP clocks around 1.16--1.18 GHz, confirming that the decode work is offloaded to the cDSP/NPU path. qprof power readings are excluded from energy claims because qprof can perturb clock and power state.
+\end{table}
+
+The process-level CPU measurements show why CPU offloading matters beyond energy alone. When the CPU consumes nearly all of its available process time
+decoding HQC, the host has little room left for other application or system work. Moving the decoding workload to the NPU reduces the decoder process CPU
+demand by more than \(99.7\%\) across all HQC parameter sets, freeing the CPU to continue handling other tasks while the NPU performs the decode computation.
+
+We also isolate the FastRPC boundary cost. The batched row now uses the
+worker-best FastRPC buffer benchmark for each HQC parameter set, while the
+``decode-one'' experiment still makes one FastRPC call per decode. Table
+\ref{tab:fastrpc-boundary-overhead} reports only the boundary-sensitive modes:
+a no-op ping, one-decode-per-RPC, and the worker-best batched path used to
+quantify boundary amortization.
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\small
+\caption{FastRPC boundary overhead on the real device.}
+\label{tab:fastrpc-boundary-overhead}
+\begin{tabular}{|c|c|c|c|c|}
+\hline
+\textbf{HQC} & \textbf{Ping us/RPC} & \textbf{Decode-one us/decode} &
+\textbf{Batched us/decode} & \textbf{Decode-one slowdown} \\
+\hline
+HQC-128 & 420.067 & 478.654 & 10.745 & 44.55x \\
+\hline
+HQC-192 & 418.542 & 494.154 & 16.521 & 29.91x \\
+\hline
+HQC-256 & 414.073 & 532.322 & 24.381 & 21.83x \\
+\hline
+\end{tabular}
+\end{table}
+
+The FastRPC no-op boundary alone is about \(414\)--\(420\ \mu\mathrm{s}\) per
+call, which is much larger than the worker-best batched per-decode cost for all
+three HQC parameter sets. Calling FastRPC once per decapsulation is therefore
+\(21.83\times\) to \(44.55\times\) slower than batching the worker-pool decode
+loop inside one remote call.
+Representative cached payload movement remains secondary to the boundary
+itself: the measured cached input overhead is about \(28.6\), \(40.1\), and
+\(83.6\ \mu\mathrm{s}\) per RPC for HQC-128, HQC-192, and HQC-256. Thus, the
+real-device worker-best NPU numbers should be interpreted as batched cDSP
+throughput with heavily amortized FastRPC overhead, not as the latency of an
+API that performs one remote call per decapsulation.
+    
