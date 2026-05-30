@@ -99,6 +99,47 @@ Reed-Muller block rather than one byte. This is the current fixed-fixture
 behavior intended to make HQC-192 and HQC-256 exercise the RS-error path instead
 of the clean-syndrome fast path.
 
+More explicitly, one Reed-Solomon symbol is one byte before the duplicated
+Reed-Muller layer. The reference encoder first produces a Reed-Solomon codeword,
+then encodes each RS byte with the duplicated Reed-Muller code:
+
+```text
+1 RS byte -> MULTIPLICITY copies of a 128-bit RM codeword
+MULTIPLICITY = ceil(PARAM_N2 / 128)
+```
+
+The fixture generator therefore treats one RS-symbol position as the whole
+RM-encoded chunk for that symbol:
+
+| HQC | `PARAM_N2` | RM multiplicity | Bytes per RS-symbol chunk | Example byte range for `position=2` |
+| --- | ---: | ---: | ---: | --- |
+| HQC-128 | 384 bits | 3 | 48 | `96..143` |
+| HQC-192 | 640 bits | 5 | 80 | `160..239` |
+| HQC-256 | 640 bits | 5 | 80 | `160..239` |
+
+For HQC-128, for example, `position=2` means:
+
+```text
+offset = 2 * (384 / 8) = 96
+bytes 96..111  = RM copy 0, 128 bits
+bytes 112..127 = RM copy 1, 128 bits
+bytes 128..143 = RM copy 2, 128 bits
+```
+
+The generator corrupts all bytes in that chunk:
+
+```c
+for (size_t j = 0; j < PARAM_N2 / 8; ++j) {
+    codeword[offset + j] ^= pattern_j;
+}
+```
+
+This matters because flipping only one byte or a few bits inside the
+RM-encoded chunk can be corrected by the Reed-Muller decoder, leaving the
+decoded RS byte unchanged and producing a clean Reed-Solomon syndrome. Corrupting
+the whole chunk makes the selected RS byte become a real RS-symbol error after
+RM decoding, so the Reed-Solomon stages are exercised by the benchmark corpus.
+
 Profiler settings:
 
 - Direct energy source: Android power-supply voltage/current sampled by `scripts/measure_board_energy.sh`
