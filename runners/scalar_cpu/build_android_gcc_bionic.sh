@@ -50,7 +50,10 @@ if ! command -v "$ADB" >/dev/null 2>&1 && [ ! -x "$ADB" ]; then
     exit 1
 fi
 
-if [ ! -f "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
+fixture_file="$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c"
+fixture_tool="$SHARED_DIR/tools/gen_${FIXTURE_PREFIX}_decode_fixture.c"
+fixture_script="$PROJECT_DIR/scripts/gen_${FIXTURE_PREFIX}_decode_fixture.sh"
+if [ ! -f "$fixture_file" ] || [ "$fixture_tool" -nt "$fixture_file" ] || [ "$fixture_script" -nt "$fixture_file" ]; then
     "$PROJECT_DIR/scripts/gen_${FIXTURE_PREFIX}_decode_fixture.sh"
 fi
 

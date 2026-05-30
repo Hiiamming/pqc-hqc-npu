@@ -40,7 +40,7 @@ if [ ! -f "$SHARED_DIR/fixtures/hqc3_decode_fixture.c" ]; then
 fi
 
 OUT="$PROJECT_DIR/build/hqc3_decode_bench_hexagon"
-BENCH_ITERS="${HQC3_BENCH_ITERS:-100}"
+BENCH_ITERS="${HQC3_BENCH_ITERS:-10}"
 mkdir -p "$(dirname "$OUT")"
 
 echo "=== Compiling HQC-192 decode benchmark for Hexagon CT intrinsic path, iters=$BENCH_ITERS ==="

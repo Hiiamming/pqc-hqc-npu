@@ -41,7 +41,6 @@
 #define HQC_BUFFER_MODE_COPY 1
 #define HQC_BUFFER_MODE_L2FETCH 2
 #define HQC_BUFFER_MODE_VTCM 3
-#define HQC_BUFFER_MODE_WORKER_POOL 4
 
 #define HQC_BUFFER_STATUS_OK 0
 #define HQC_BUFFER_STATUS_BAD_ARGS -1
@@ -85,11 +84,13 @@ static void usage(const char *prog)
             "  %s bench [iters]\n"
             "  %s ping [calls]\n"
             "  %s decode-one [calls]\n"
+            "  %s substage <1..9> [iters]\n"
             "  %s open-close [calls]\n"
             "  %s payload-in <malloc|rpcmem-cached|rpcmem-uncached> <bytes> [calls]\n"
             "  %s payload-out <malloc|rpcmem-cached|rpcmem-uncached> <bytes> [calls]\n"
             "  %s payload-inout <malloc|rpcmem-cached|rpcmem-uncached> <in-bytes> <out-bytes> [calls]\n"
-            "  %s buffer-bench <malloc|rpcmem-cached|rpcmem-uncached> <direct|copy|l2fetch|vtcm|worker> [iters] [codeword-count]\n",
+            "  %s buffer-bench <malloc|rpcmem-cached|rpcmem-uncached> <direct|copy|l2fetch|vtcm> [iters] [codeword-count]\n",
+            prog,
             prog,
             prog,
             prog,
@@ -128,9 +129,6 @@ static int parse_dsp_mode(const char *arg)
     }
     if (strcmp(arg, "vtcm") == 0) {
         return HQC_BUFFER_MODE_VTCM;
-    }
-    if (strcmp(arg, "worker") == 0) {
-        return HQC_BUFFER_MODE_WORKER_POOL;
     }
     return -1;
 }
@@ -379,6 +377,74 @@ static int run_decode_one(int calls)
            ns_per_decode,
            ns_per_decode / 1000.0,
            ns_per_decode / 1000.0);
+
+    return passed ? 0 : 1;
+}
+
+static const char *substage_name(int stage)
+{
+    switch (stage) {
+        case 1: return "rm_expand";
+        case 2: return "rm_hadamard";
+        case 3: return "rm_peak";
+        case 4: return "rs_syndrome";
+        case 5: return "rs_elp";
+        case 6: return "rs_roots";
+        case 7: return "rs_z";
+        case 8: return "rs_error_values";
+        case 9: return "rs_correct";
+        default: return "unknown";
+    }
+}
+
+static int run_substage(int stage, int iters)
+{
+    remote_handle64 handle = 0;
+    uint64_t start_ns;
+    uint64_t elapsed_ns;
+    int total_ops = 0;
+    int checksum = 0;
+    int passed = 0;
+    int ret;
+
+    if (stage < 1 || stage > 9 || iters <= 0) {
+        usage("hqc_host");
+        return 2;
+    }
+
+    printf("[fastrpc-intrinsic-decode] substage HQC-%d stage=%s(%d) iters=%d\n",
+           HQC_PARAM_LEVEL,
+           substage_name(stage),
+           stage,
+           iters);
+
+    ret = open_hqc(&handle);
+    if (ret != 0) {
+        return 1;
+    }
+
+    start_ns = monotonic_ns();
+    ret = hqc_substage_bench(handle, stage, iters, &total_ops, &checksum, &passed);
+    elapsed_ns = monotonic_ns() - start_ns;
+    close_hqc(handle);
+
+    if (ret != 0) {
+        return report_rpc_error(ret);
+    }
+
+    double elapsed_ms = (double)elapsed_ns / 1000000.0;
+    double ns_per_op = total_ops ? (double)elapsed_ns / (double)total_ops : 0.0;
+
+    printf("[fastrpc-intrinsic-decode] mode=substage stage=%s stage_id=%d total_ops=%d checksum=0x%08x result=%s\n",
+           substage_name(stage),
+           stage,
+           total_ops,
+           (unsigned)checksum,
+           passed ? "PASS" : "FAIL");
+    printf("[fastrpc-intrinsic-decode] elapsed_ms=%.3f ns_per_op=%.1f us_per_op=%.3f\n",
+           elapsed_ms,
+           ns_per_op,
+           ns_per_op / 1000.0);
 
     return passed ? 0 : 1;
 }
@@ -787,6 +853,15 @@ int main(int argc, char **argv)
             count = HQC_DEFAULT_BENCH_ITERS;
         }
     } else if (argc == 3) {
+        if (strcmp(argv[1], "substage") == 0) {
+            int stage = 0;
+            if (!parse_positive_int(argv[2], &stage)) {
+                fprintf(stderr, "Invalid substage: %s\n", argv[2]);
+                usage(argv[0]);
+                return 2;
+            }
+            return run_substage(stage, HQC_DEFAULT_BENCH_ITERS);
+        }
         mode = argv[1];
         if (!parse_positive_int(argv[2], &count)) {
             fprintf(stderr, "Invalid count: %s\n", argv[2]);
@@ -864,6 +939,26 @@ int main(int argc, char **argv)
             }
             return run_buffer_bench(argv[2], argv[3], iters, codeword_count);
         }
+        if (strcmp(argv[1], "substage") == 0) {
+            int stage = 0;
+            int iters = HQC_DEFAULT_BENCH_ITERS;
+
+            if (argc != 3 && argc != 4) {
+                usage(argv[0]);
+                return 2;
+            }
+            if (!parse_positive_int(argv[2], &stage)) {
+                fprintf(stderr, "Invalid substage: %s\n", argv[2]);
+                usage(argv[0]);
+                return 2;
+            }
+            if (argc == 4 && !parse_positive_int(argv[3], &iters)) {
+                fprintf(stderr, "Invalid iters: %s\n", argv[3]);
+                usage(argv[0]);
+                return 2;
+            }
+            return run_substage(stage, iters);
+        }
         usage(argv[0]);
         return 2;
     }
@@ -876,6 +971,10 @@ int main(int argc, char **argv)
     }
     if (strcmp(mode, "decode-one") == 0) {
         return run_decode_one(count);
+    }
+    if (strcmp(mode, "substage") == 0) {
+        usage(argv[0]);
+        return 2;
     }
     if (strcmp(mode, "open-close") == 0) {
         return run_open_close(count);

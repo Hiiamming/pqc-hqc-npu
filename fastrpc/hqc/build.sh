@@ -23,10 +23,6 @@ HQC_GF_LUT_MUL="${HQC_GF_LUT_MUL:-0}"
 HQC_RM_EXPAND_LUT="${HQC_RM_EXPAND_LUT:-0}"
 HQC_RM_FUSED_FAST="${HQC_RM_FUSED_FAST:-0}"
 HQC_RS_ROOTS_HVX="${HQC_RS_ROOTS_HVX:-1}"
-HQC_USE_WORKER_POOL="${HQC_USE_WORKER_POOL:-0}"
-WORKER_POOL_ROOT="${WORKER_POOL_ROOT:-$HEXAGON_SDK_ROOT/libs/worker_pool}"
-WORKER_POOL_INC_DIR="${WORKER_POOL_INC_DIR:-$WORKER_POOL_ROOT/inc}"
-WORKER_POOL_LIB="${WORKER_POOL_LIB:-$WORKER_POOL_ROOT/prebuilt/hexagon_toolv19_v68/libworker_pool.a}"
 
 HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}"
 case "$HQC_PARAM_LEVEL" in
@@ -58,7 +54,10 @@ for tool in "$QAIC" "$HEXAGON_CLANG" "$AARCH64_CC"; do
     fi
 done
 
-if [ ! -f "$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c" ]; then
+fixture_file="$SHARED_DIR/fixtures/${FIXTURE_PREFIX}_decode_fixture.c"
+fixture_tool="$SHARED_DIR/tools/gen_${FIXTURE_PREFIX}_decode_fixture.c"
+fixture_script="$PROJECT_DIR/scripts/gen_${FIXTURE_PREFIX}_decode_fixture.sh"
+if [ ! -f "$fixture_file" ] || [ "$fixture_tool" -nt "$fixture_file" ] || [ "$fixture_script" -nt "$fixture_file" ]; then
     "$PROJECT_DIR/scripts/gen_${FIXTURE_PREFIX}_decode_fixture.sh"
 fi
 
@@ -85,36 +84,21 @@ common_sources=()
 if [ -f "$PROJECT_DIR/src/common/fft.c" ]; then
     common_sources+=("$PROJECT_DIR/src/common/fft.c")
 fi
-worker_pool_inc_args=()
-worker_pool_link_args=()
-if [ "$HQC_USE_WORKER_POOL" = "1" ]; then
-    if [ ! -f "$WORKER_POOL_INC_DIR/worker_pool.h" ]; then
-        echo "ERROR: $WORKER_POOL_INC_DIR/worker_pool.h not found" >&2
-        exit 1
-    fi
-    if [ ! -f "$WORKER_POOL_LIB" ]; then
-        echo "ERROR: $WORKER_POOL_LIB not found" >&2
-        exit 1
-    fi
-    worker_pool_inc_args=(-I "$WORKER_POOL_INC_DIR")
-    worker_pool_link_args=("$WORKER_POOL_LIB")
-fi
 "$HEXAGON_CLANG" -O2 -fPIC -shared \
     "$HEXAGON_ARCH_FLAG" \
     -mhvx -mhvx-length=128B \
     -DHQC_PARAM_LEVEL="$HQC_PARAM_LEVEL" \
     -DHQC_USE_HVX_INTRINSICS=1 \
     -DHQC_USE_HVX_RS_SYNDROME=1 \
+    -DHQC_ENABLE_SUBSTAGE_BENCH=1 \
     -DHQC_RS_FAST_NON_CT="$HQC_RS_FAST_NON_CT" \
     -DHQC_GF_LUT_MUL="$HQC_GF_LUT_MUL" \
     -DHQC_RM_EXPAND_LUT="$HQC_RM_EXPAND_LUT" \
     -DHQC_RM_FUSED_FAST="$HQC_RM_FUSED_FAST" \
     -DHQC_RS_ROOTS_HVX="$HQC_RS_ROOTS_HVX" \
-    -DHQC_USE_WORKER_POOL="$HQC_USE_WORKER_POOL" \
     -I "$GEN_DIR" \
     -I "$HEXAGON_SDK_ROOT/incs" \
     -I "$HEXAGON_SDK_ROOT/incs/stddef" \
-    "${worker_pool_inc_args[@]}" \
     -I "$SHARED_DIR/fixtures" \
     -I "$SHARED_DIR/src/common" \
     -I "$SHARED_DIR/src/ref" \
@@ -128,7 +112,6 @@ fi
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \
     "$PROJECT_DIR/src/ref/reed_solomon.c" \
-    "${worker_pool_link_args[@]}" \
     -o "$BUILD_DIR/libhqc_skel.so"
 
 echo "=== Building ARM64 host ==="

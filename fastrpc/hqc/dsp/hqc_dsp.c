@@ -3,21 +3,14 @@
 
 #include <hexagon_protos.h>
 
+#include "data_structures.h"
 #include "hqc.h"
 #include "parameters.h"
 #include "reed_muller.h"
 #include "reed_solomon.h"
 
-#if HQC_USE_WORKER_POOL
-#include "worker_pool.h"
-#endif
-
 #ifndef HQC_PARAM_LEVEL
 #define HQC_PARAM_LEVEL 128
-#endif
-
-#ifndef HQC_USE_WORKER_POOL
-#define HQC_USE_WORKER_POOL 0
 #endif
 
 #if HQC_PARAM_LEVEL == 128
@@ -43,33 +36,51 @@
 #endif
 
 #define MSG_WORDS CEIL_DIVIDE(PARAM_K, 8)
+#define MULTIPLICITY CEIL_DIVIDE(PARAM_N2, 128)
 
 #define HQC_BUFFER_MODE_DIRECT 0
 #define HQC_BUFFER_MODE_COPY 1
 #define HQC_BUFFER_MODE_L2FETCH 2
 #define HQC_BUFFER_MODE_VTCM 3
-#define HQC_BUFFER_MODE_WORKER_POOL 4
-
 #define HQC_BUFFER_STATUS_OK 0
 #define HQC_BUFFER_STATUS_BAD_ARGS -1
 #define HQC_BUFFER_STATUS_UNSUPPORTED -2
 
-#if HQC_USE_WORKER_POOL
-typedef struct {
-    const unsigned char *codewords;
-    unsigned char *messages;
-    int codeword_stride;
-    int message_stride;
-    int start;
-    int end;
-    int decodes;
-    int ok;
-    uint32_t checksum;
-    worker_synctoken_t *token;
-} hqc_worker_decode_job_t;
-#endif
-
 static size_t decode_one_fixture_index = 0;
+
+typedef int16_t rm_expanded_cdw[128];
+
+static uint64_t substage_codeword_words[HQC_FIXTURE_COUNT][VEC_N1N2_SIZE_64] __attribute__((aligned(128)));
+static uint64_t substage_rs_words[HQC_FIXTURE_COUNT][VEC_N1_SIZE_64] __attribute__((aligned(128)));
+static rm_expanded_cdw substage_rm_expanded_ref[HQC_FIXTURE_COUNT][PARAM_N1] __attribute__((aligned(128)));
+static rm_expanded_cdw substage_rm_transform_ref[HQC_FIXTURE_COUNT][PARAM_N1] __attribute__((aligned(128)));
+static uint8_t substage_rs_cdw_ref[HQC_FIXTURE_COUNT][PARAM_N1];
+static uint16_t substage_rs_syndromes_ref[HQC_FIXTURE_COUNT][2 * PARAM_DELTA];
+static uint16_t substage_rs_sigma_ref[HQC_FIXTURE_COUNT][1 << PARAM_SIGMA_SIZE_LOG];
+static uint8_t substage_rs_error_ref[HQC_FIXTURE_COUNT][1 << PARAM_M];
+static uint16_t substage_rs_z_ref[HQC_FIXTURE_COUNT][PARAM_N1];
+static uint16_t substage_rs_error_values_ref[HQC_FIXTURE_COUNT][PARAM_N1];
+static uint8_t substage_rs_corrected_ref[HQC_FIXTURE_COUNT][PARAM_N1];
+static uint16_t substage_rs_degree_ref[HQC_FIXTURE_COUNT];
+
+void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]);
+void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst);
+int32_t find_peaks_hvx(rm_expanded_cdw *transform);
+
+static void rm_expand(rm_expanded_cdw *dest, rm_codeword_t *src)
+{
+    expand_and_sum_hvx(dest, src);
+}
+
+static void rm_hadamard(rm_expanded_cdw *src, rm_expanded_cdw *dst)
+{
+    hadamard_hvx(src, dst);
+}
+
+static int32_t rm_peak(rm_expanded_cdw *transform)
+{
+    return find_peaks_hvx(transform);
+}
 
 int hqc_open(const char *uri, remote_handle64 *handle)
 {
@@ -106,120 +117,6 @@ static void prefetch_codeword_l2(const uint8_t *codeword, int codeword_bytes)
 
     Q6_l2fetch_AR((void *)codeword, (128 << 16) | (128 << 8) | lines);
 }
-
-#if HQC_USE_WORKER_POOL
-static void hqc_decode_worker_range(void *data)
-{
-    hqc_worker_decode_job_t *job = (hqc_worker_decode_job_t *)data;
-    int ok = 1;
-    int decodes = 0;
-    uint32_t sum = 0;
-
-    for (int idx = job->start; idx < job->end; ++idx) {
-        const uint8_t *src = job->codewords + (size_t)idx * (size_t)job->codeword_stride;
-        uint8_t *dst = job->messages + (size_t)idx * (size_t)job->message_stride;
-        size_t fixture = (size_t)idx % HQC_FIXTURE_COUNT;
-
-        hqc_decode_direct(dst, (const uint64_t *)src);
-        ok &= memcmp(HQC_FIXTURE_EXPECTED_MESSAGES[fixture], dst, PARAM_K) == 0;
-        sum ^= dst[0] ^ ((uint32_t)dst[PARAM_K - 1] << 8) ^ (uint32_t)idx;
-        ++decodes;
-    }
-
-    job->ok = ok;
-    job->decodes = decodes;
-    job->checksum = sum;
-
-    if (job->token != 0) {
-        worker_pool_synctoken_jobdone(job->token);
-    }
-}
-
-static int hqc_decode_buffer_bench_worker(const unsigned char *codewords,
-                                          unsigned char *messages,
-                                          int iters,
-                                          int codeword_count,
-                                          int codeword_stride,
-                                          int message_stride,
-                                          int *total_decodes,
-                                          int *checksum,
-                                          int *passed,
-                                          int *mode_status)
-{
-    worker_pool_context_t context = 0;
-    unsigned int ranges = num_hvx128_contexts;
-    hqc_worker_decode_job_t jobs[MAX_NUM_WORKERS];
-    int ok = 1;
-    int decodes = 0;
-    uint32_t sum = 0;
-
-    (void)mode_status;
-
-    if (ranges == 0 || ranges > num_workers) {
-        ranges = num_workers;
-    }
-    if (ranges == 0) {
-        ranges = 1;
-    }
-    if (ranges > MAX_NUM_WORKERS) {
-        ranges = MAX_NUM_WORKERS;
-    }
-    if (ranges > (unsigned int)codeword_count) {
-        ranges = (unsigned int)codeword_count;
-    }
-
-    for (int iter = 0; iter < iters; ++iter) {
-        worker_synctoken_t token;
-        unsigned int submitted = (ranges > 1) ? (ranges - 1u) : 0u;
-
-        memset(jobs, 0, sizeof(jobs));
-        if (submitted != 0) {
-            worker_pool_synctoken_init(&token, submitted);
-        }
-
-        for (unsigned int r = 0; r < ranges; ++r) {
-            int start = (int)(((uint64_t)codeword_count * r) / ranges);
-            int end = (int)(((uint64_t)codeword_count * (r + 1u)) / ranges);
-            jobs[r].codewords = codewords;
-            jobs[r].messages = messages;
-            jobs[r].codeword_stride = codeword_stride;
-            jobs[r].message_stride = message_stride;
-            jobs[r].start = start;
-            jobs[r].end = end;
-            jobs[r].ok = 1;
-            jobs[r].token = (r == 0 || submitted == 0) ? 0 : &token;
-        }
-
-        for (unsigned int r = 1; r < ranges; ++r) {
-            worker_pool_job_t worker_job;
-            worker_job.fptr = hqc_decode_worker_range;
-            worker_job.dptr = &jobs[r];
-            if (worker_pool_submit(context, worker_job) != 0) {
-                jobs[r].token = 0;
-                hqc_decode_worker_range(&jobs[r]);
-                worker_pool_synctoken_jobdone(&token);
-            }
-        }
-
-        hqc_decode_worker_range(&jobs[0]);
-
-        if (submitted != 0) {
-            worker_pool_synctoken_wait(&token);
-        }
-
-        for (unsigned int r = 0; r < ranges; ++r) {
-            ok &= jobs[r].ok;
-            decodes += jobs[r].decodes;
-            sum ^= jobs[r].checksum;
-        }
-    }
-
-    *total_decodes = decodes;
-    *checksum = (int)sum;
-    *passed = ok;
-    return 0;
-}
-#endif
 
 static int hqc_decode_buffer_bench_serial(const unsigned char *codewords,
                                           unsigned char *messages,
@@ -350,6 +247,144 @@ int hqc_decode_bench(remote_handle64 handle,
     return 0;
 }
 
+int hqc_substage_bench(remote_handle64 handle,
+                       int stage,
+                       int iters,
+                       int *total_ops,
+                       int *checksum,
+                       int *passed)
+{
+    (void)handle;
+    uint64_t message_words[MSG_WORDS] = {0};
+    int ok = 1;
+    uint32_t sum = 0;
+    int ops = 0;
+
+    if (iters <= 0) {
+        iters = 1;
+    }
+
+    if (stage < 1 || stage > 9) {
+        *total_ops = 0;
+        *checksum = 0;
+        *passed = 0;
+        return 0;
+    }
+
+    for (size_t fixture = 0; fixture < HQC_FIXTURE_COUNT; ++fixture) {
+        memcpy(substage_codeword_words[fixture], HQC_FIXTURE_CODEWORDS[fixture], VEC_N1N2_SIZE_BYTES);
+        reed_muller_decode(substage_rs_words[fixture], substage_codeword_words[fixture]);
+        reed_solomon_decode(message_words, substage_rs_words[fixture]);
+        ok &= memcmp(message_words, HQC_FIXTURE_EXPECTED_MESSAGES[fixture], PARAM_K) == 0;
+
+        rm_codeword_t *code_array = (rm_codeword_t *)substage_codeword_words[fixture];
+        for (size_t block = 0; block < PARAM_N1; ++block) {
+            rm_expanded_cdw setup;
+            rm_expand(&substage_rm_expanded_ref[fixture][block], &code_array[block * MULTIPLICITY]);
+            memcpy(setup, substage_rm_expanded_ref[fixture][block], sizeof(setup));
+            rm_hadamard(&setup, &substage_rm_transform_ref[fixture][block]);
+            substage_rm_transform_ref[fixture][block][0] -= 64 * MULTIPLICITY;
+            sum ^= (uint8_t)rm_peak(&substage_rm_transform_ref[fixture][block]);
+        }
+
+        memcpy(substage_rs_cdw_ref[fixture], substage_rs_words[fixture], PARAM_N1);
+        hqc_rs_bench_compute_syndromes(substage_rs_syndromes_ref[fixture], substage_rs_cdw_ref[fixture]);
+        substage_rs_degree_ref[fixture] = hqc_rs_bench_compute_elp(substage_rs_sigma_ref[fixture], substage_rs_syndromes_ref[fixture]);
+        hqc_rs_bench_compute_roots(substage_rs_error_ref[fixture], substage_rs_sigma_ref[fixture], substage_rs_degree_ref[fixture]);
+        hqc_rs_bench_compute_z_poly(substage_rs_z_ref[fixture], substage_rs_sigma_ref[fixture], substage_rs_degree_ref[fixture], substage_rs_syndromes_ref[fixture]);
+        hqc_rs_bench_compute_error_values(substage_rs_error_values_ref[fixture], substage_rs_z_ref[fixture], substage_rs_error_ref[fixture], substage_rs_sigma_ref[fixture], substage_rs_degree_ref[fixture]);
+        memcpy(substage_rs_corrected_ref[fixture], substage_rs_cdw_ref[fixture], PARAM_N1);
+        hqc_rs_bench_correct_errors(substage_rs_corrected_ref[fixture], substage_rs_error_values_ref[fixture]);
+        ok &= memcmp(substage_rs_corrected_ref[fixture] + (PARAM_G - 1), HQC_FIXTURE_EXPECTED_MESSAGES[fixture], PARAM_K) == 0;
+    }
+
+    for (int iter = 0; iter < iters; ++iter) {
+        for (size_t fixture = 0; fixture < HQC_FIXTURE_COUNT; ++fixture) {
+            switch (stage) {
+                case 1: {
+                    rm_codeword_t *code_array = (rm_codeword_t *)substage_codeword_words[fixture];
+                    rm_expanded_cdw out;
+                    for (size_t block = 0; block < PARAM_N1; ++block) {
+                        rm_expand(&out, &code_array[block * MULTIPLICITY]);
+                        sum ^= (uint16_t)out[0] ^ ((uint32_t)(uint16_t)out[127] << 16);
+                        ++ops;
+                    }
+                    break;
+                }
+                case 2: {
+                    rm_expanded_cdw src;
+                    rm_expanded_cdw out;
+                    for (size_t block = 0; block < PARAM_N1; ++block) {
+                        memcpy(src, substage_rm_expanded_ref[fixture][block], sizeof(src));
+                        rm_hadamard(&src, &out);
+                        out[0] -= 64 * MULTIPLICITY;
+                        sum ^= (uint16_t)out[0] ^ ((uint32_t)(uint16_t)out[127] << 16);
+                        ++ops;
+                    }
+                    break;
+                }
+                case 3: {
+                    for (size_t block = 0; block < PARAM_N1; ++block) {
+                        sum ^= (uint8_t)rm_peak(&substage_rm_transform_ref[fixture][block]);
+                        ++ops;
+                    }
+                    break;
+                }
+                case 4: {
+                    uint16_t syndromes[2 * PARAM_DELTA] = {0};
+                    hqc_rs_bench_compute_syndromes(syndromes, substage_rs_cdw_ref[fixture]);
+                    sum ^= syndromes[0] ^ ((uint32_t)syndromes[2 * PARAM_DELTA - 1] << 16);
+                    ++ops;
+                    break;
+                }
+                case 5: {
+                    uint16_t sigma[1 << PARAM_SIGMA_SIZE_LOG] = {0};
+                    uint16_t degree = hqc_rs_bench_compute_elp(sigma, substage_rs_syndromes_ref[fixture]);
+                    sum ^= degree ^ sigma[0] ^ ((uint32_t)sigma[PARAM_DELTA] << 16);
+                    ++ops;
+                    break;
+                }
+                case 6: {
+                    uint8_t error[1 << PARAM_M] = {0};
+                    uint16_t sigma[1 << PARAM_SIGMA_SIZE_LOG] = {0};
+                    memcpy(sigma, substage_rs_sigma_ref[fixture], sizeof(sigma));
+                    hqc_rs_bench_compute_roots(error, sigma, substage_rs_degree_ref[fixture]);
+                    sum ^= error[0] ^ ((uint32_t)error[PARAM_N1 - 1] << 16);
+                    ++ops;
+                    break;
+                }
+                case 7: {
+                    uint16_t z[PARAM_N1] = {0};
+                    hqc_rs_bench_compute_z_poly(z, substage_rs_sigma_ref[fixture], substage_rs_degree_ref[fixture], substage_rs_syndromes_ref[fixture]);
+                    sum ^= z[0] ^ ((uint32_t)z[PARAM_DELTA] << 16);
+                    ++ops;
+                    break;
+                }
+                case 8: {
+                    uint16_t error_values[PARAM_N1] = {0};
+                    hqc_rs_bench_compute_error_values(error_values, substage_rs_z_ref[fixture], substage_rs_error_ref[fixture], substage_rs_sigma_ref[fixture], substage_rs_degree_ref[fixture]);
+                    sum ^= error_values[0] ^ ((uint32_t)error_values[PARAM_N1 - 1] << 16);
+                    ++ops;
+                    break;
+                }
+                case 9: {
+                    uint8_t corrected[PARAM_N1] = {0};
+                    memcpy(corrected, substage_rs_cdw_ref[fixture], PARAM_N1);
+                    hqc_rs_bench_correct_errors(corrected, substage_rs_error_values_ref[fixture]);
+                    sum ^= corrected[0] ^ ((uint32_t)corrected[PARAM_N1 - 1] << 16);
+                    ++ops;
+                    break;
+                }
+            }
+        }
+    }
+
+    *total_ops = ops;
+    *checksum = (int)sum;
+    *passed = ok;
+    return 0;
+}
+
 int hqc_payload_in(remote_handle64 handle,
                    const unsigned char *input,
                    int inputLen,
@@ -475,28 +510,9 @@ int hqc_decode_buffer_bench(remote_handle64 handle,
         messagesLen < codeword_count * message_stride ||
         (dsp_mode != HQC_BUFFER_MODE_DIRECT &&
          dsp_mode != HQC_BUFFER_MODE_COPY &&
-         dsp_mode != HQC_BUFFER_MODE_L2FETCH &&
-         dsp_mode != HQC_BUFFER_MODE_WORKER_POOL)) {
+         dsp_mode != HQC_BUFFER_MODE_L2FETCH)) {
         *mode_status = HQC_BUFFER_STATUS_BAD_ARGS;
         return 0;
-    }
-
-    if (dsp_mode == HQC_BUFFER_MODE_WORKER_POOL) {
-#if HQC_USE_WORKER_POOL
-        return hqc_decode_buffer_bench_worker(codewords,
-                                              messages,
-                                              iters,
-                                              codeword_count,
-                                              codeword_stride,
-                                              message_stride,
-                                              total_decodes,
-                                              checksum,
-                                              passed,
-                                              mode_status);
-#else
-        *mode_status = HQC_BUFFER_STATUS_UNSUPPORTED;
-        return 0;
-#endif
     }
 
     return hqc_decode_buffer_bench_serial(codewords,

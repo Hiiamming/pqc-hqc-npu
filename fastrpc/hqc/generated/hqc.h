@@ -261,6 +261,7 @@ __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_close)(remote_handle64 h) __QAIC_HEAD
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_ping)(remote_handle64 _h, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_decode_one)(remote_handle64 _h, int* rs_symbol_errors, int* checksum, int* passed) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_decode_bench)(remote_handle64 _h, int iters, int* total_decodes, int* total_rs_symbol_errors, int* checksum, int* passed) __QAIC_HEADER_ATTRIBUTE;
+__QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_substage_bench)(remote_handle64 _h, int stage, int iters, int* total_ops, int* checksum, int* passed) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_payload_in)(remote_handle64 _h, const unsigned char* input, int inputLen, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_payload_out)(remote_handle64 _h, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;
 __QAIC_HEADER_EXPORT int __QAIC_HEADER(hqc_payload_inout)(remote_handle64 _h, const unsigned char* input, int inputLen, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_HEADER_ATTRIBUTE;

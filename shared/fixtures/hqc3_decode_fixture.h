@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "parameters.h"
 
-#define HQC3_FIXTURE_COUNT 16
+#define HQC3_FIXTURE_COUNT 256
 
 extern const uint8_t hqc3_fixture_messages[HQC3_FIXTURE_COUNT][PARAM_K];
 extern const uint8_t hqc3_fixture_codewords[HQC3_FIXTURE_COUNT][VEC_N1N2_SIZE_BYTES];

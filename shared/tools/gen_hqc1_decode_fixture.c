@@ -1,15 +1,27 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "code.h"
 #include "parameters.h"
 
-#define FIXTURE_COUNT 16
+#define FIXTURE_COUNT 256
 #define RM_BLOCK_BYTES (PARAM_N2 / 8)
 #define MSG_WORDS CEIL_DIVIDE(PARAM_K, 8)
 
 static uint32_t prng_state = 0x128c0de5u;
+
+static void init_prng_from_env(void)
+{
+    const char *seed = getenv("HQC_FIXTURE_SEED");
+    if (seed != NULL && seed[0] != '\0') {
+        prng_state = (uint32_t)strtoul(seed, NULL, 0);
+        if (prng_state == 0) {
+            prng_state = 1;
+        }
+    }
+}
 
 static uint32_t prng_next(void)
 {
@@ -97,6 +109,8 @@ static void print_array_2d(const char *name, const uint8_t *buf, size_t rows, si
 
 int main(void)
 {
+    init_prng_from_env();
+
     uint8_t messages[FIXTURE_COUNT][PARAM_K] = {{0}};
     uint8_t codewords[FIXTURE_COUNT][VEC_N1N2_SIZE_BYTES] = {{0}};
     uint8_t recovered_messages[FIXTURE_COUNT][PARAM_K] = {{0}};

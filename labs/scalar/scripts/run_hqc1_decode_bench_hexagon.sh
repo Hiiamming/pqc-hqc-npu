@@ -33,7 +33,7 @@ if [ ! -f "$SHARED_DIR/fixtures/hqc1_decode_fixture.c" ]; then
 fi
 
 OUT="$PROJECT_DIR/build/hqc1_decode_bench_hexagon"
-BENCH_ITERS="${HQC1_BENCH_ITERS:-100}"
+BENCH_ITERS="${HQC1_BENCH_ITERS:-10}"
 mkdir -p "$(dirname "$OUT")"
 
 echo "=== Compiling HQC-128 decode benchmark for Hexagon scalar, iters=$BENCH_ITERS ==="

@@ -43,14 +43,19 @@ case "$level" in
     *) echo "ERROR: level must be 128, 192, or 256" >&2; exit 1 ;;
 esac
 
-prefix="HQC${level}"
+case "$level" in
+    128) hqc_id="1" ;;
+    192) hqc_id="3" ;;
+    256) hqc_id="5" ;;
+esac
+prefix="HQC${hqc_id}"
 case "$bench" in
     decode)
-        script="$lab/scripts/run_hqc${level}_decode_bench_hexagon.sh"
+        script="$lab/scripts/run_hqc${hqc_id}_decode_bench_hexagon.sh"
         env "${prefix}_BENCH_ITERS=$iters" bash "$script"
         ;;
     stage)
-        script="$lab/scripts/run_hqc${level}_decode_stage_bench_hexagon.sh"
+        script="$lab/scripts/run_hqc${hqc_id}_decode_stage_bench_hexagon.sh"
         if [ ! -f "$script" ]; then
             echo "ERROR: stage bench is not available for $variant HQC-$level" >&2
             exit 1
@@ -58,7 +63,7 @@ case "$bench" in
         env "${prefix}_BENCH_ITERS=$iters" "${prefix}_STAGE=$stage" bash "$script"
         ;;
     substage)
-        script="$lab/scripts/run_hqc${level}_decode_substage_bench_hexagon.sh"
+        script="$lab/scripts/run_hqc${hqc_id}_decode_substage_bench_hexagon.sh"
         if [ ! -f "$script" ]; then
             echo "ERROR: substage bench is not available for $variant HQC-$level" >&2
             exit 1

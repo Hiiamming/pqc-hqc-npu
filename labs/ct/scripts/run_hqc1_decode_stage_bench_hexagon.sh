@@ -33,7 +33,7 @@ if [ ! -f "$SHARED_DIR/fixtures/hqc1_decode_fixture.c" ]; then
 fi
 
 STAGE="${HQC1_STAGE:-0}"
-BENCH_ITERS="${HQC1_BENCH_ITERS:-100}"
+BENCH_ITERS="${HQC1_BENCH_ITERS:-10}"
 OUT="$PROJECT_DIR/build/hqc1_decode_stage_bench_hexagon_stage${STAGE}"
 mkdir -p "$(dirname "$OUT")"
 
