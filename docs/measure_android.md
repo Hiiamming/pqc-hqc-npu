@@ -23,7 +23,7 @@ ADB=/path/to/adb scripts/measure_android.sh --suite boundary
 ```
 
 The boundary suite records open/close, ping, payload, decode-one, and batched
-decode measurements. Its defaults match the current `README_res.md` rerun:
+decode measurements. Its defaults match the current `result.md` rerun:
 `5` repeats, `10000` ping/payload/decode-one calls, `100` open/close calls, and
 `125` batched benchmark iterations.
 

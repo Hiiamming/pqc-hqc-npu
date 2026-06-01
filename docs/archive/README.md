@@ -10,5 +10,5 @@ These files are historical notes from earlier simulator, Linux-board, Android-bo
 The active root entrypoints are:
 
 - `../../README.md`
-- `../../README_setup.md`
-- `../../README_result_whole.md`
+- `../../run.md`
+- `../../result.md`

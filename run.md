@@ -230,7 +230,7 @@ It writes:
 - `real_device_stats_tables.tex`: generated TeX rows
 
 Without `--result-md`, the lower-level runner appends markdown tables to
-`README_result_whole.md`. Use `--result-md /tmp/<name>.md` for temporary
+`result.md`. Use `--result-md /tmp/<name>.md` for temporary
 regression checks.
 
 ### Boundary Suite: FastRPC Overhead
@@ -304,8 +304,10 @@ scripts/measure_android.sh \
 It writes one raw log per mode and repeat under:
 
 ```text
-results/fastrpc_overhead/<timestamp>_hqc<level>/run<repeat>/
+$OUT_ROOT/<timestamp>_hqc<level>/run<repeat>/
 ```
+
+The default `OUT_ROOT` is `results/fastrpc_overhead`.
 
 ### Manual FastRPC Build And Run
 
@@ -347,27 +349,49 @@ Run a mode:
 
 Replace `bench 125` with any command shape from the boundary-mode table.
 
-### qprof Diagnostic Context
+### Optional qprof Diagnostic Context
 
-qprof is diagnostic-only. Do not mix qprof runs into direct-energy tables:
-qprof can perturb power and cDSP clock state.
+qprof is diagnostic-only. A fresh board session may not include the Qualcomm
+Profiler target files, so install them before use. Do not mix qprof runs into
+direct-energy tables: qprof can perturb power and cDSP clock state.
 
 Use qprof for context such as CPU load, NPU utilization, QDSP clock, HMX
 utilization, MemNoc vote, and thermal counters.
 
-Supported modes:
+Supported modes when qprof is installed:
 
 | Mode | What it profiles |
 | --- | --- |
 | `idle` | Idle CPU, battery, and thermal context |
 | `cpu` | CPU workload context |
 | `npu0` | NPU capability `profiler:nsp-dsp-metrics` |
-| `npu1` | NPU capability `profiler:nsp1-dsp-metrics` used by the current device |
+| `npu1` | NPU capability `profiler:nsp1-dsp-metrics` used by devices that expose NSP1 metrics |
+
+Install the Qualcomm Profiler target files from WSL when `/vendor/bin/qprof` is
+missing:
+
+```sh
+QPROF_TARGET="/mnt/c/Program Files (x86)/Qualcomm/Shared/QualcommProfiler/API/target-la/aarch64"
+QPROF_DB="/mnt/c/Program Files (x86)/Qualcomm/Shared/Prof_Ext/ExtQProfiler.db"
+
+"$ADB" root
+"$ADB" remount
+"$ADB" shell 'mkdir -p /vendor/bin /vendor/qprof/libs /vendor/qprof/backends /data/shared/qcom/Shared/Prof_Ext'
+"$ADB" push "$QPROF_TARGET/bins/." /vendor/bin/
+"$ADB" push "$QPROF_TARGET/libs/." /vendor/qprof/libs/
+"$ADB" push "$QPROF_TARGET/libs/backends/." /vendor/qprof/backends/
+"$ADB" push "$QPROF_DB" /data/shared/qcom/Shared/Prof_Ext/
+"$ADB" shell 'chmod -R 755 /vendor/bin/qprof /vendor/bin/qmonitor-grpc-server /vendor/bin/profilerUtilityApp /vendor/qprof'
+```
 
 Check qprof capabilities:
 
 ```sh
 "$ADB" shell '
+  test -x /vendor/bin/qprof || {
+    echo "qprof is unavailable on this device"
+    exit 1
+  }
   export QMONITOR_BACKEND_LIB_PATH=/vendor/qprof/backends
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/vendor/qprof/libs
   /vendor/bin/qprof --capabilities
