@@ -1,3 +1,0 @@
-level=256 fixtures=256 declared_nonzero=247 actual_nonzero_syndrome=247 declared_but_clean=0 max_syndrome_weight=58
-degree_hist: 0:9 1:9 2:9 3:9 4:9 5:9 6:9 7:9 8:9 9:9 10:9 11:9 12:9 13:9 14:9 15:9 16:8 17:8 18:8 19:8 20:8 21:8 22:8 23:8 24:8 25:8 26:8 27:8 28:8 29:8
-syndrome_weight_hist: 0:9 56:8 57:40 58:199

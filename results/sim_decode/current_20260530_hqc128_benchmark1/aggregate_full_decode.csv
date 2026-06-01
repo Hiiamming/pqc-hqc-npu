@@ -1,3 +1,0 @@
-hqc,backend,i1_pcycles,i3_pcycles,delta_decodes,pcycles_per_decode,insns_per_decode,speedup_vs_scalar,status
-HQC-128,CPU scalar,247685868,736012680,512,953763.3046875,862807.201171875,1.0,PASS
-HQC-128,NPU fastest,15107910,36341124,512,41471.12109375,32757.119140625,22.998252266472708,PASS
