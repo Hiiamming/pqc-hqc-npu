@@ -25,6 +25,8 @@
 #include <stdio.h>
 #endif
 
+/* Configuration and forward declarations. */
+
 /* The HVX Chien-search path now scales to PARAM_N1 up to 128 by splitting
  * the support across multiple 64-lane halfword vectors. HQC-128 (N1=46) and
  * HQC-192 (N1=56) use 1 vector; HQC-256 (N1=90) uses 2 vectors. The exact
@@ -41,14 +43,14 @@
 
 static uint16_t mod(uint16_t i, uint16_t modulus);
 static uint16_t ct_is_zero_u16(uint16_t x);
-static void compute_syndromes(uint16_t *syndromes, uint8_t *cdw);
-static void compute_syndromes_hvx(uint16_t *syndromes, uint8_t *cdw);
-static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes);
-static void compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree);
-static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t degree);
-static void compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t degree, const uint16_t *syndromes);
-static void compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree);
-static void correct_errors(uint8_t *cdw, const uint16_t *error_values);
+static void rs_compute_syndromes(uint16_t *syndromes, uint8_t *cdw);
+static uint16_t rs_compute_elp(uint16_t *sigma, const uint16_t *syndromes);
+static void rs_compute_roots(uint8_t *error, const uint16_t *sigma, uint16_t degree);
+static void rs_compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t degree, const uint16_t *syndromes);
+static void rs_compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree);
+static void rs_correct_errors(uint8_t *cdw, const uint16_t *error_values);
+
+/* Small utilities. */
 
 /**
  * Returns i modulo the given modulus.
@@ -70,6 +72,8 @@ static uint16_t mod(uint16_t i, uint16_t modulus) {
 static uint16_t ct_is_zero_u16(uint16_t x) {
     return (uint16_t)(1 ^ (((uint16_t)(x | (uint16_t)-x)) >> 15));
 }
+
+/* Reed-Solomon generator and encode path. */
 
 /**
  * @brief Computes the generator polynomial of the primitive Reed-Solomon code with given parameters.
@@ -141,6 +145,8 @@ void reed_solomon_encode(uint64_t *cdw, const uint64_t *msg) {
     memcpy(cdw, cdw_bytes, PARAM_N1);
 }
 
+/* Reed-Solomon decode stages. */
+
 /**
  * @brief Computes 2 * PARAM_DELTA syndromes
  *
@@ -150,10 +156,6 @@ void reed_solomon_encode(uint64_t *cdw, const uint64_t *msg) {
  * @param[out] syndromes Array of size 2 * PARAM_DELTA receiving the computed syndromes
  * @param[in] cdw Array of size PARAM_N1 storing the received vector
  */
-void compute_syndromes(uint16_t *syndromes, uint8_t *cdw) {
-    compute_syndromes_hvx(syndromes, cdw);
-}
-
 static uint16_t alpha_ji_pow[PARAM_N1 - 1][64] __attribute__((aligned(128)));
 static int alpha_ji_pow_ready = 0;
 
@@ -216,7 +218,7 @@ static inline HVX_Vector __attribute__((always_inline)) gf_mul_scalar_by_vec_hvx
     return acc;
 }
 
-static void compute_syndromes_hvx(uint16_t *syndromes, uint8_t *cdw) {
+static void rs_compute_syndromes(uint16_t *syndromes, uint8_t *cdw) {
     uint16_t out[64] __attribute__((aligned(128)));
     HVX_Vector acc = Q6_V_vzero();
 
@@ -244,7 +246,7 @@ static void compute_syndromes_hvx(uint16_t *syndromes, uint8_t *cdw) {
  * @param[out] sigma Array of size (at least) PARAM_DELTA receiving the ELP
  * @param[in] syndromes Array of size (at least) 2*PARAM_DELTA storing the syndromes
  */
-static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
+static uint16_t rs_compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
     uint16_t b[PARAM_DELTA + 1] = {0};
     uint16_t t[PARAM_DELTA + 1] = {0};
     uint16_t deg_sigma = 0;
@@ -302,10 +304,6 @@ static uint16_t compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
  * @param[out] error Array of 2^PARAM_M elements receiving the error polynomial
  * @param[in] sigma Array of 2^PARAM_SIGMA_SIZE_LOG elements storing the error locator polynomial
  */
-static void compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree) {
-    compute_roots_hvx(error, sigma, degree);
-}
-
 static uint16_t rs_support_powers[PARAM_DELTA + 1][RS_SUPPORT_VEC_COUNT * 64] __attribute__((aligned(128)));
 static int rs_support_powers_ready = 0;
 
@@ -343,7 +341,7 @@ static void init_rs_support_powers(void) {
  * in parallel. The fastest path loops only over the actual locator degree and
  * skips zero coefficients.
  */
-static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t degree) {
+static void rs_compute_roots(uint8_t *error, const uint16_t *sigma, uint16_t degree) {
     uint16_t eval[RS_SUPPORT_VEC_COUNT * 64] __attribute__((aligned(128)));
     HVX_Vector acc[RS_SUPPORT_VEC_COUNT];
     for (int v = 0; v < RS_SUPPORT_VEC_COUNT; ++v) {
@@ -385,7 +383,7 @@ static void compute_roots_hvx(uint8_t *error, const uint16_t *sigma, uint16_t de
  * @param[in] degree Integer that is the degree of polynomial sigma
  * @param[in] syndromes Array of 2 * PARAM_DELTA storing the syndromes
  */
-static void compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t degree, const uint16_t *syndromes) {
+static void rs_compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t degree, const uint16_t *syndromes) {
     size_t i, j;
     z[0] = 1;
 
@@ -421,7 +419,7 @@ static void compute_z_poly(uint16_t *z, const uint16_t *sigma, const uint16_t de
  * @param[in] z Array of PARAM_DELTA + 1 elements storing the polynomial z(x)
  * @param[in] error Array storing the error
  */
-static void compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree) {
+static void rs_compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree) {
     uint16_t beta_j[PARAM_DELTA] = {0};
     size_t pos_j[PARAM_DELTA] = {0};
     size_t delta = 0;
@@ -463,12 +461,14 @@ static void compute_error_values(uint16_t *error_values, const uint16_t *z, cons
  * @param[out] cdw Array of PARAM_N1 elements receiving the corrected vector
  * @param[in] error_values Array of PARAM_DELTA elements storing the error values
  */
-static void correct_errors(uint8_t *cdw, const uint16_t *error_values) {
+static void rs_correct_errors(uint8_t *cdw, const uint16_t *error_values) {
 #pragma unroll
     for (size_t i = 0; i < PARAM_N1; ++i) {
         cdw[i] ^= error_values[i];
     }
 }
+
+/* Public decode API. */
 
 /**
  * @brief Decodes the received word
@@ -500,24 +500,24 @@ void reed_solomon_decode(uint64_t *msg, uint64_t *cdw) {
     memcpy(cdw_bytes, cdw, PARAM_N1);
 
     // Calculate the 2*PARAM_DELTA syndromes
-    compute_syndromes(syndromes, cdw_bytes);
+    rs_compute_syndromes(syndromes, cdw_bytes);
 
     // Compute the error locator polynomial sigma
     // Sigma's degree is at most PARAM_DELTA. The larger buffer keeps the
     // legacy HQC locator storage shape used by the substage benches.
-    deg = compute_elp(sigma, syndromes);
+    deg = rs_compute_elp(sigma, syndromes);
 
     // Compute the error polynomial error
-    compute_roots(error, sigma, deg);
+    rs_compute_roots(error, sigma, deg);
 
     // Compute the polynomial z(x)
-    compute_z_poly(z, sigma, deg, syndromes);
+    rs_compute_z_poly(z, sigma, deg, syndromes);
 
     // Compute the error values
-    compute_error_values(error_values, z, error, sigma, deg);
+    rs_compute_error_values(error_values, z, error, sigma, deg);
 
     // Correct the errors
-    correct_errors(cdw_bytes, error_values);
+    rs_correct_errors(cdw_bytes, error_values);
 
     // Retrieve the message from the decoded codeword
     memcpy(msg, cdw_bytes + (PARAM_G - 1), PARAM_K);
@@ -585,28 +585,30 @@ void reed_solomon_decode(uint64_t *msg, uint64_t *cdw) {
     memset(cdw_bytes, 0, sizeof cdw_bytes);
 }
 
+/* Substage benchmark adapters. */
+
 #if defined(HQC_ENABLE_SUBSTAGE_BENCH)
 void hqc_rs_bench_compute_syndromes(uint16_t *syndromes, uint8_t *cdw) {
-    compute_syndromes(syndromes, cdw);
+    rs_compute_syndromes(syndromes, cdw);
 }
 
 uint16_t hqc_rs_bench_compute_elp(uint16_t *sigma, const uint16_t *syndromes) {
-    return compute_elp(sigma, syndromes);
+    return rs_compute_elp(sigma, syndromes);
 }
 
 void hqc_rs_bench_compute_roots(uint8_t *error, uint16_t *sigma, uint16_t degree) {
-    compute_roots(error, sigma, degree);
+    rs_compute_roots(error, sigma, degree);
 }
 
 void hqc_rs_bench_compute_z_poly(uint16_t *z, const uint16_t *sigma, uint16_t degree, const uint16_t *syndromes) {
-    compute_z_poly(z, sigma, degree, syndromes);
+    rs_compute_z_poly(z, sigma, degree, syndromes);
 }
 
 void hqc_rs_bench_compute_error_values(uint16_t *error_values, const uint16_t *z, const uint8_t *error, const uint16_t *sigma, uint16_t degree) {
-    compute_error_values(error_values, z, error, sigma, degree);
+    rs_compute_error_values(error_values, z, error, sigma, degree);
 }
 
 void hqc_rs_bench_correct_errors(uint8_t *cdw, const uint16_t *error_values) {
-    correct_errors(cdw, error_values);
+    rs_correct_errors(cdw, error_values);
 }
 #endif

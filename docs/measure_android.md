@@ -1,23 +1,48 @@
 # Android Device Measurement
 
-Build and measure CPU scalar plus fastest NPU:
+Use the stable entrypoint for the real-device paper measurements:
 
 ```sh
-ADB=/path/to/adb scripts/measure_android_decode.sh
+ADB=/path/to/adb scripts/measure_android.sh --suite paper
 ```
 
-Measure CT NPU:
+This measures the ARM64 scalar baseline and the `labs/fastest` FastRPC cDSP
+path. The defaults match the methodology used by `references/Benchmark.tex`:
+
+- `HEXAGON_ARCH=v73`
+- HQC levels `128 192 256`
+- `5` repeats
+- `32000` decodes per workload
+- direct board-energy sampling with qprof disabled
+- process CPU sampling from `/proc/<pid>/task/*/stat`
+
+Run the FastRPC boundary suite separately:
 
 ```sh
-ADB=/path/to/adb scripts/measure_android_ct_npu.sh
+ADB=/path/to/adb scripts/measure_android.sh --suite boundary
 ```
 
-Run both:
+The boundary suite records open/close, ping, payload, decode-one, and batched
+decode measurements. Its defaults match the current `README_res.md` rerun:
+`5` repeats, `10000` ping/payload/decode-one calls, `100` open/close calls, and
+`125` batched benchmark iterations.
+
+Useful overrides:
 
 ```sh
-ADB=/path/to/adb scripts/measure_android_all.sh
+ADB=/path/to/adb scripts/measure_android.sh \
+  --suite paper \
+  --levels "128" \
+  --repeats 1 \
+  --target-decodes 32000
 ```
 
-The direct path uses `scripts/measure_board_energy.sh` on-device. The qprof path is still separate and is run by the measurement scripts only for the qprof rows, because qprof itself adds overhead and should not be mixed into direct-energy runs.
+The paper suite writes raw summaries plus aggregate CSV and generated TeX rows.
+The direct path uses `scripts/measure_board_energy.sh` on-device. qprof remains
+diagnostic-only because it can perturb power and clock state; run
+`scripts/measure_qprof.sh` separately when cDSP utilization or clock context is
+needed.
 
-Root-level compatibility wrappers were removed; use the `scripts/` entrypoints directly.
+The suite implementation is internal under `scripts/lib/`. CT and worker
+experiments are archived under `scripts/archive/` and intentionally excluded
+from this paper workflow.

@@ -180,11 +180,6 @@ metric_avg() {
         | awk '{sum += $1; count += 1} END {if (count > 0) printf "%.6f", sum / count}'
 }
 
-metric_min() {
-    awk -v id="$1" "$metric_values_awk" "$profile_clean_log" \
-        | awk 'NR == 1 {min = $1} $1 < min {min = $1} END {if (NR > 0) printf "%.6f", min}'
-}
-
 metric_max() {
     awk -v id="$1" "$metric_values_awk" "$profile_clean_log" \
         | awk 'NR == 1 {max = $1} $1 > max {max = $1} END {if (NR > 0) printf "%.6f", max}'

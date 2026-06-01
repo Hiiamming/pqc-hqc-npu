@@ -19,6 +19,8 @@
 #include <hexagon_protos.h>
 #include <hexagon_types.h>
 
+/* Configuration, types, and lookup tables. */
+
 /**
  * @brief Number of repeated 128-bit codeword blocks.
  *
@@ -87,15 +89,15 @@ static void init_rm_expand2_nibble_table(void) {
 }
 #endif
 
-static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[]);
-static inline void rm_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1);
-static inline void rm_hadamard_two_rows_hvx(HVX_Vector *a0, HVX_Vector *a1, HVX_Vector *b0, HVX_Vector *b1);
+static inline void rm_expand_copies_to_halfwords(uint64_t *out, const rm_codeword_t src[]);
+static inline void rm_apply_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1);
+static inline void rm_apply_hadamard_two_blocks_hvx(HVX_Vector *a0, HVX_Vector *a1, HVX_Vector *b0, HVX_Vector *b1);
 static inline HVX_Vector hvx_reduce_max_h(HVX_Vector v);
 static inline HVX_Vector hvx_reduce_min_h(HVX_Vector v);
 static inline int32_t hvx_lane0_i16(HVX_Vector v);
-static inline int32_t rm_peak_from_hvx_rows(HVX_Vector row0, HVX_Vector row1);
-static inline int32_t rm_decode_one_hvx_fast(rm_codeword_t src[]);
-static inline void rm_decode_two_hvx_fast(uint8_t *message_array, rm_codeword_t *codeArray, size_t i);
+static inline int32_t rm_select_peak_from_rows(HVX_Vector row0, HVX_Vector row1);
+static inline int32_t rm_decode_one_block_hvx(rm_codeword_t src[]);
+static inline void rm_decode_two_blocks_hvx(uint8_t *message_array, rm_codeword_t *codeArray, size_t i);
 
 static const int16_t rm_half_hadamard_fix[64] __attribute__((aligned(128))) = {
     64 * MULTIPLICITY,
@@ -117,6 +119,8 @@ void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst);
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]);
 int32_t find_peaks_hvx(rm_expanded_cdw *transform);
 
+/* RM HVX primitives. */
+
 static inline uint64_t expand_nibble_to_u16(uint32_t x) {
     return ((uint64_t)(x & 1u) << 0) | ((uint64_t)(x & 2u) << 15) |
            ((uint64_t)(x & 4u) << 30) | ((uint64_t)(x & 8u) << 45);
@@ -129,7 +133,7 @@ static inline int32_t rm_peak_sign_bit(int32_t peak_value) {
     return (int32_t)(128u * (peak_nonzero & (peak_negative ^ 1u)));
 }
 
-static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[]) {
+static inline void rm_expand_copies_to_halfwords(uint64_t *out, const rm_codeword_t src[]) {
 #if MULTIPLICITY == 3
     if (!rm_expand3_nibble_table_ready) {
         init_rm_expand3_nibble_table();
@@ -226,7 +230,7 @@ static inline void expand_rm_copies_fast(uint64_t *out, const rm_codeword_t src[
 #endif
 }
 
-static inline void rm_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1) {
+static inline void rm_apply_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1) {
     HVX_Vector lo = *row0;
     HVX_Vector hi = *row1;
 
@@ -253,7 +257,7 @@ static inline void rm_hadamard_rows_hvx(HVX_Vector *row0, HVX_Vector *row1) {
     *row1 = hi;
 }
 
-static inline void rm_hadamard_two_rows_hvx(HVX_Vector *a0, HVX_Vector *a1, HVX_Vector *b0, HVX_Vector *b1) {
+static inline void rm_apply_hadamard_two_blocks_hvx(HVX_Vector *a0, HVX_Vector *a1, HVX_Vector *b0, HVX_Vector *b1) {
     HVX_Vector alo = *a0;
     HVX_Vector ahi = *a1;
     HVX_Vector blo = *b0;
@@ -315,7 +319,7 @@ static inline int32_t hvx_lane0_i16(HVX_Vector v) {
     return lane[0];
 }
 
-static inline int32_t rm_peak_from_hvx_rows(HVX_Vector row0, HVX_Vector row1) {
+static inline int32_t rm_select_peak_from_rows(HVX_Vector row0, HVX_Vector row1) {
     HVX_Vector abs0 = Q6_Vh_vabs_Vh(row0);
     HVX_Vector abs1 = Q6_Vh_vabs_Vh(row1);
     HVX_Vector max_abs = hvx_reduce_max_h(Q6_Vh_vmax_VhVh(abs0, abs1));
@@ -336,6 +340,8 @@ static inline int32_t rm_peak_from_hvx_rows(HVX_Vector row0, HVX_Vector row1) {
 
     return peak_pos | rm_peak_sign_bit(peak_value);
 }
+
+/* Public RM encode helper. */
 
 /**
  * @brief Encode a single byte into a single codeword using RM(1,7)
@@ -376,6 +382,8 @@ void encode(rm_codeword_t *word, int32_t message) {
     return;
 }
 
+/* Substage benchmark adapters. */
+
 /**
  * @brief HVX RM(1,7) Hadamard transform.
  *
@@ -388,7 +396,7 @@ void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst) {
     HVX_Vector row0 = *(const HVX_Vector *)&(*src)[0];
     HVX_Vector row1 = *(const HVX_Vector *)&(*src)[64];
 
-    rm_hadamard_rows_hvx(&row0, &row1);
+    rm_apply_hadamard_rows_hvx(&row0, &row1);
 
     *(HVX_Vector *)&(*dst)[0] = row0;
     *(HVX_Vector *)&(*dst)[64] = row1;
@@ -402,7 +410,7 @@ void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst) {
  * repeated copies.
  */
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]) {
-    expand_rm_copies_fast((uint64_t *)*dest, src);
+    rm_expand_copies_to_halfwords((uint64_t *)*dest, src);
 }
 
 /**
@@ -416,8 +424,10 @@ void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]) {
 int32_t find_peaks_hvx(rm_expanded_cdw *transform) {
     HVX_Vector row0 = *(const HVX_Vector *)&(*transform)[0];
     HVX_Vector row1 = *(const HVX_Vector *)&(*transform)[64];
-    return rm_peak_from_hvx_rows(row0, row1);
+    return rm_select_peak_from_rows(row0, row1);
 }
+
+/* Fused fastest decode path. */
 
 /**
  * @brief Fused RM block decoder used by the only active intrinsic decode path.
@@ -426,39 +436,41 @@ int32_t find_peaks_hvx(rm_expanded_cdw *transform) {
  * the half-Hadamard correction, and runs the HVX peak reduction inside one
  * function. The standalone helpers remain available for substage profiling.
  */
-static inline int32_t __attribute__((always_inline)) rm_decode_one_hvx_fast(rm_codeword_t src[]) {
+static inline int32_t __attribute__((always_inline)) rm_decode_one_block_hvx(rm_codeword_t src[]) {
     rm_expanded_cdw expanded __attribute__((aligned(128)));
 
-    expand_rm_copies_fast((uint64_t *)expanded, src);
+    rm_expand_copies_to_halfwords((uint64_t *)expanded, src);
 
     HVX_Vector row0 = *(const HVX_Vector *)&expanded[0];
     HVX_Vector row1 = *(const HVX_Vector *)&expanded[64];
-    rm_hadamard_rows_hvx(&row0, &row1);
+    rm_apply_hadamard_rows_hvx(&row0, &row1);
     row0 = Q6_Vh_vsub_VhVh(row0, *(const HVX_Vector *)rm_half_hadamard_fix);
 
-    return rm_peak_from_hvx_rows(row0, row1);
+    return rm_select_peak_from_rows(row0, row1);
 }
 
-static inline void __attribute__((always_inline)) rm_decode_two_hvx_fast(uint8_t *message_array, rm_codeword_t *codeArray, size_t i) {
+static inline void __attribute__((always_inline)) rm_decode_two_blocks_hvx(uint8_t *message_array, rm_codeword_t *codeArray, size_t i) {
     rm_expanded_cdw expanded0 __attribute__((aligned(128)));
     rm_expanded_cdw expanded1 __attribute__((aligned(128)));
 
-    expand_rm_copies_fast((uint64_t *)expanded0, &codeArray[i * MULTIPLICITY]);
-    expand_rm_copies_fast((uint64_t *)expanded1, &codeArray[(i + 1) * MULTIPLICITY]);
+    rm_expand_copies_to_halfwords((uint64_t *)expanded0, &codeArray[i * MULTIPLICITY]);
+    rm_expand_copies_to_halfwords((uint64_t *)expanded1, &codeArray[(i + 1) * MULTIPLICITY]);
 
     HVX_Vector row00 = *(const HVX_Vector *)&expanded0[0];
     HVX_Vector row01 = *(const HVX_Vector *)&expanded0[64];
     HVX_Vector row10 = *(const HVX_Vector *)&expanded1[0];
     HVX_Vector row11 = *(const HVX_Vector *)&expanded1[64];
-    rm_hadamard_two_rows_hvx(&row00, &row01, &row10, &row11);
+    rm_apply_hadamard_two_blocks_hvx(&row00, &row01, &row10, &row11);
 
     HVX_Vector fix = *(const HVX_Vector *)rm_half_hadamard_fix;
     row00 = Q6_Vh_vsub_VhVh(row00, fix);
     row10 = Q6_Vh_vsub_VhVh(row10, fix);
 
-    message_array[i] = rm_peak_from_hvx_rows(row00, row01);
-    message_array[i + 1] = rm_peak_from_hvx_rows(row10, row11);
+    message_array[i] = rm_select_peak_from_rows(row00, row01);
+    message_array[i + 1] = rm_select_peak_from_rows(row10, row11);
 }
+
+/* Public RM codec API. */
 
 /**
  * @brief Encodes the received word
@@ -500,9 +512,9 @@ void reed_muller_decode(uint64_t *msg, const uint64_t *cdw) {
     rm_codeword_t *codeArray = (rm_codeword_t *)cdw;
     size_t i = 0;
     for (; i + 1 < VEC_N1_SIZE_BYTES; i += 2) {
-        rm_decode_two_hvx_fast(message_array, codeArray, i);
+        rm_decode_two_blocks_hvx(message_array, codeArray, i);
     }
     for (; i < VEC_N1_SIZE_BYTES; i++) {
-        message_array[i] = rm_decode_one_hvx_fast(&codeArray[i * MULTIPLICITY]);
+        message_array[i] = rm_decode_one_block_hvx(&codeArray[i * MULTIPLICITY]);
     }
 }

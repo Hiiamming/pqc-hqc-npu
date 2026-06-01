@@ -52,6 +52,7 @@ results/qprof/
 qprof_*_runs/
 qprof_*_runs*/
 qprof_hqc_*_runs/
+results/
 
 # Generated deployment artifact snapshots.
 hqc_fastrpc_intrinsic_android/
@@ -69,3 +70,5 @@ lenh.txt
 *.out
 *.pdf
 *-metrics.json
+
+references/

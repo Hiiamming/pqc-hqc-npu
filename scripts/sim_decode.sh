@@ -32,8 +32,15 @@ while [ "$#" -gt 0 ]; do
 done
 
 case "$variant" in
-    scalar) lab="$ROOT_DIR/labs/scalar" ;;
-    fastest) lab="$ROOT_DIR/labs/fastest" ;;
+    scalar|fastest)
+        exec bash "$ROOT_DIR/scripts/lib/sim_decode_common.sh" \
+            --variant "$variant" \
+            --level "$level" \
+            --bench "$bench" \
+            --iters "$iters" \
+            --stage "$stage" \
+            --substage "$substage"
+        ;;
     ct) lab="$ROOT_DIR/labs/ct" ;;
     *) echo "ERROR: variant must be scalar, fastest, or ct" >&2; exit 1 ;;
 esac

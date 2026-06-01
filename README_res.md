@@ -341,14 +341,3 @@ How this table is measured:
 | Reed-Solomon ELP (`5`) | CPU scalar | 542239275 | 603471981 | 512 | 119595.129 | 119595.129 | 105316.586 | 1.00x | PASS |
 | Reed-Solomon ELP (`5`) | NPU fastest | 31531236 | 34900842 | 512 | 6581.262 | 6581.262 | 4898.504 | 18.17x | PASS |
 
-## Raw Files - Current Cloud2
-
-- Combined summary CSV: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_stats_current_20260530_cloud2_combined/summary.csv`
-- Direct aggregate CSV: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_stats_current_20260530_cloud2_combined/aggregate_direct.csv`
-- Process aggregate CSV: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/qprof_hqc_whole_stats_current_20260530_cloud2_combined/aggregate_process.csv`
-- Per-chunk markdown/log: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/qprof/current_20260530_cloud2_chunks.md`
-- FastRPC boundary summary CSV: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/fastrpc_overhead_current_cloud2_combined/summary.csv`
-- FastRPC boundary aggregate CSV: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/fastrpc_overhead_current_cloud2_combined/aggregate.csv`
-- Simulator HQC-128 Benchmark(1) raw logs: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/sim_decode/current_20260530_hqc128_benchmark1/`
-- Simulator HQC-128 full-decode aggregate CSV: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/sim_decode/current_20260530_hqc128_benchmark1/aggregate_full_decode.csv`
-- Simulator HQC-128 selected-substage aggregate CSV: `/home/hiiamming/Code/test/hexagon-tutorial/hqc/results/sim_decode/current_20260530_hqc128_benchmark1/aggregate_selected_substage.csv`
