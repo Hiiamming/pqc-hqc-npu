@@ -22,6 +22,14 @@ interface hqc : remote_handle64 {
         rout long passed
     );
 
+    long decode_bench_count(
+        in long decode_count,
+        rout long total_decodes,
+        rout long total_rs_symbol_errors,
+        rout long checksum,
+        rout long passed
+    );
+
     long substage_bench(
         in long stage,
         in long iters,

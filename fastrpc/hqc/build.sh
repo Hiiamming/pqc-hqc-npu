@@ -15,6 +15,7 @@ RPCMEM_INC_DIR="${RPCMEM_INC_DIR:-$HEXAGON_SDK_ROOT/ipc/fastrpc/rpcmem/inc}"
 RPCMEM_LIB="${RPCMEM_LIB:-$HEXAGON_SDK_ROOT/ipc/fastrpc/rpcmem/prebuilt/UbuntuARM_aarch64/rpcmem.a}"
 AARCH64_LDFLAGS="${AARCH64_LDFLAGS:-}"
 TESTSIG="$HEXAGON_SDK_ROOT/tools/elfsigner/output/testsig-0xaa3ec42e.so"
+HEXKL_ROOT="${HEXKL_ROOT:-$ROOT_DIR/../tools/hexkl-addon}"
 
 BUILD_DIR="$SCRIPT_DIR/build"
 GEN_DIR="$SCRIPT_DIR/generated"
@@ -23,6 +24,9 @@ HQC_GF_LUT_MUL="${HQC_GF_LUT_MUL:-0}"
 HQC_RM_EXPAND_LUT="${HQC_RM_EXPAND_LUT:-0}"
 HQC_RM_FUSED_FAST="${HQC_RM_FUSED_FAST:-0}"
 HQC_RS_ROOTS_HVX="${HQC_RS_ROOTS_HVX:-1}"
+HQC_RM_HMX_BATCH="${HQC_RM_HMX_BATCH:-0}"
+HQC_RM_HMX_DEVICE="${HQC_RM_HMX_DEVICE:-0}"
+HQC_RM_HMX_OUTPUT_BIAS="${HQC_RM_HMX_OUTPUT_BIAS:-0}"
 
 HQC_PARAM_LEVEL="${HQC_PARAM_LEVEL:-128}"
 case "$HQC_PARAM_LEVEL" in
@@ -81,12 +85,28 @@ case "$HEXAGON_ARCH" in
 esac
 echo "=== Building HQC-$HQC_PARAM_LEVEL cDSP HVX intrinsic skel, arch=$HEXAGON_ARCH ==="
 common_sources=()
+hmx_flags=()
+hmx_link_flags=()
 if [ -f "$PROJECT_DIR/src/common/fft.c" ]; then
     common_sources+=("$PROJECT_DIR/src/common/fft.c")
+fi
+if [ "$HQC_RM_HMX_BATCH" != 0 ]; then
+    hmx_flags+=(-mhmx)
+fi
+if [ "$HQC_RM_HMX_DEVICE" != 0 ]; then
+    if [ ! -f "$HEXKL_ROOT/include/hexkl_micro.h" ] ||
+       [ ! -f "$HEXKL_ROOT/lib/hexagon_toolv19_v75/libhexkl_micro.a" ]; then
+        echo "ERROR: HexKL addon not found at $HEXKL_ROOT" >&2
+        echo "Run ../hmx-tutorial/ch05-hmx/install_hexkl.sh or set HEXKL_ROOT." >&2
+        exit 1
+    fi
+    hmx_flags+=(-I "$HEXKL_ROOT/include")
+    hmx_link_flags+=(-Wl,--start-group "$HEXKL_ROOT/lib/hexagon_toolv19_v75/libhexkl_micro.a" -Wl,--end-group)
 fi
 "$HEXAGON_CLANG" -O2 -fPIC -shared \
     "$HEXAGON_ARCH_FLAG" \
     -mhvx -mhvx-length=128B \
+    "${hmx_flags[@]}" \
     -DHQC_PARAM_LEVEL="$HQC_PARAM_LEVEL" \
     -DHQC_USE_HVX_INTRINSICS=1 \
     -DHQC_USE_HVX_RS_SYNDROME=1 \
@@ -96,6 +116,9 @@ fi
     -DHQC_RM_EXPAND_LUT="$HQC_RM_EXPAND_LUT" \
     -DHQC_RM_FUSED_FAST="$HQC_RM_FUSED_FAST" \
     -DHQC_RS_ROOTS_HVX="$HQC_RS_ROOTS_HVX" \
+    -DHQC_RM_HMX_BATCH="$HQC_RM_HMX_BATCH" \
+    -DHQC_RM_HMX_DEVICE="$HQC_RM_HMX_DEVICE" \
+    -DHQC_RM_HMX_OUTPUT_BIAS="$HQC_RM_HMX_OUTPUT_BIAS" \
     -I "$GEN_DIR" \
     -I "$HEXAGON_SDK_ROOT/incs" \
     -I "$HEXAGON_SDK_ROOT/incs/stddef" \
@@ -112,6 +135,7 @@ fi
     "$PROJECT_DIR/src/ref/gf.c" \
     "$PROJECT_DIR/src/ref/reed_muller.c" \
     "$PROJECT_DIR/src/ref/reed_solomon.c" \
+    "${hmx_link_flags[@]}" \
     -o "$BUILD_DIR/libhqc_skel.so"
 
 echo "=== Building ARM64 host ==="

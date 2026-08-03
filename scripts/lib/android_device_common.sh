@@ -135,7 +135,12 @@ idle_position=$DIRECT_IDLE_POSITION
 workload_cmd=$workload
 EOF
 
-    "$ADB" shell "cd '$ENERGY_REMOTE_DIR' && IDLE_POSITION='$DIRECT_IDLE_POSITION' IDLE_SECONDS='$DIRECT_IDLE_SECONDS' SAMPLE_INTERVAL='$DIRECT_SAMPLE_INTERVAL' ENERGY_TMP_DIR='$ENERGY_REMOTE_DIR' sh ./measure_board_energy.sh '$label' sh '$remote_script'" > "$log" 2>&1
+    local voltage_env current_env
+    voltage_env=""
+    current_env=""
+    [ -n "${VOLTAGE_PATH:-}" ] && voltage_env="VOLTAGE_PATH='$VOLTAGE_PATH'"
+    [ -n "${CURRENT_PATH:-}" ] && current_env="CURRENT_PATH='$CURRENT_PATH'"
+    "$ADB" shell "cd '$ENERGY_REMOTE_DIR' && $voltage_env $current_env IDLE_POSITION='$DIRECT_IDLE_POSITION' IDLE_SECONDS='$DIRECT_IDLE_SECONDS' SAMPLE_INTERVAL='$DIRECT_SAMPLE_INTERVAL' ENERGY_TMP_DIR='$ENERGY_REMOTE_DIR' sh ./measure_board_energy.sh '$label' sh '$remote_script'" > "$log" 2>&1
 
     local rc result elapsed_s total us run_w idle_w delta_w delta_j uj run_samples idle_samples elapsed_ms dec_s tpw
     rc="$(android_device_extract_field "$log" rc)"

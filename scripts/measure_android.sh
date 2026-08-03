@@ -7,6 +7,7 @@ suite="${SUITE:-paper}"
 levels="${LEVELS:-128 192 256}"
 repeats="${REPEATS:-}"
 target_decodes="${TARGET_DECODES:-}"
+batch_sizes="${BATCH_SIZES:-}"
 out_root="${OUT_ROOT:-}"
 result_md="${RESULT_MD:-}"
 skip_build="${SKIP_BUILD:-0}"
@@ -21,13 +22,20 @@ Android real-device benchmark entrypoint for the CPU scalar baseline and the
 FastRPC cDSP fastest path.
 
 Options:
-  --suite paper|boundary  paper: latency, direct energy, and process CPU
+  --suite paper|boundary|batch|paper-batch
+                          paper: latency, direct energy, and process CPU
                           boundary: FastRPC open/ping/payload/decode overhead
+                          batch: batched decode size vs us/decode sweep
+                          paper-batch: paper-style fixture decodes per single
+                          FastRPC call vs us/decode sweep
   --levels "128 192 256" HQC parameter levels to measure
   --repeats N             measured repeats; defaults to 5
-  --target-decodes N      decodes per paper-suite workload; defaults to 32000
+  --target-decodes N      decodes per paper/batch workload; defaults to 32000
+                          for paper and 32768 for batch
+  --batch-sizes "1 2 ..." batch sizes for --suite batch/paper-batch; defaults to powers
+                          of two from 1 through 256
   --out-root DIR          local raw-result directory
-  --result-md FILE        markdown result log for the paper suite
+  --result-md FILE        markdown result log for paper/batch suites
   --skip-build            reuse already-deployed artifacts
   --sanity                run the optional historical-baseline sanity check
   --sanity-only           run only the optional historical-baseline sanity check
@@ -40,6 +48,8 @@ Environment:
 Examples:
   ADB=/path/to/adb scripts/measure_android.sh --suite paper
   ADB=/path/to/adb scripts/measure_android.sh --suite boundary
+  ADB=/path/to/adb scripts/measure_android.sh --suite batch
+  ADB=/path/to/adb scripts/measure_android.sh --suite paper-batch
 EOF
 }
 
@@ -49,6 +59,7 @@ while [ "$#" -gt 0 ]; do
         --levels) levels="$2"; shift 2 ;;
         --repeats) repeats="$2"; shift 2 ;;
         --target-decodes) target_decodes="$2"; shift 2 ;;
+        --batch-sizes) batch_sizes="$2"; shift 2 ;;
         --out-root) out_root="$2"; shift 2 ;;
         --result-md) result_md="$2"; shift 2 ;;
         --skip-build) skip_build=1; shift ;;
@@ -87,8 +98,29 @@ case "$suite" in
         export BENCH_ITERS="${BENCH_ITERS:-125}"
         exec "$ROOT_DIR/scripts/lib/android_measure_boundary.sh"
         ;;
+    batch)
+        if [ "$run_sanity" = "1" ]; then
+            echo "ERROR: --sanity and --sanity-only apply only to --suite paper" >&2
+            exit 2
+        fi
+        export REPEATS="${repeats:-5}"
+        export BATCH_TARGET_DECODES="${BATCH_TARGET_DECODES:-${target_decodes:-32768}}"
+        export BATCH_SIZES="${batch_sizes:-1 2 4 8 16 32 64 128 256}"
+        [ -n "$result_md" ] && export RESULT_MD="$result_md"
+        exec "$ROOT_DIR/scripts/lib/android_measure_batch.sh"
+        ;;
+    paper-batch)
+        if [ "$run_sanity" = "1" ]; then
+            echo "ERROR: --sanity and --sanity-only apply only to --suite paper" >&2
+            exit 2
+        fi
+        export REPEATS="${repeats:-5}"
+        export PAPER_BATCH_SIZES="${batch_sizes:-1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768}"
+        [ -n "$result_md" ] && export RESULT_MD="$result_md"
+        exec "$ROOT_DIR/scripts/lib/android_measure_paper_batch.sh"
+        ;;
     *)
-        echo "ERROR: --suite must be paper or boundary" >&2
+        echo "ERROR: --suite must be paper, boundary, batch, or paper-batch" >&2
         exit 2
         ;;
 esac

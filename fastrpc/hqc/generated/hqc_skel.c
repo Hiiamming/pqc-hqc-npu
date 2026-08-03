@@ -277,11 +277,11 @@ static const Type types[1] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,
 static const Parameter parameters[7] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)0x0,0}}, 4,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),3,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0}};
 static const Parameter* const parameterArrays[21] = {(&(parameters[5])),(&(parameters[6])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[5])),(&(parameters[6])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[3])),(&(parameters[4])),(&(parameters[0])),(&(parameters[1])),(&(parameters[2]))};
 static const Method methods[10] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x0,0x0,0x1),0x4,0x0,2,2,(&(parameterArrays[18])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x1,0x0),0x0,0x0,1,1,(&(parameterArrays[20])),0x1,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x4,0x4,2,2,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0xc,3,3,(&(parameterArrays[7])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x4,0x10,5,5,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x8,0xc,5,5,(&(parameterArrays[5])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[15])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x8,0x4,5,3,(&(parameterArrays[12])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x2,0x0,0x0),0xc,0x4,7,4,(&(parameterArrays[11])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x2,0x0,0x0),0x1c,0x10,14,11,(&(parameterArrays[0])),0x4,0x4}};
-static const Method* const methodArrays[10] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8]),&(methods[9])};
-static const char strings[291] = "total_rs_symbol_errors\0decode_buffer_bench\0codeword_stride\0message_stride\0codeword_count\0substage_bench\0payload_inout\0total_decodes\0decode_bench\0mode_status\0payload_out\0payload_in\0decode_one\0codewords\0total_ops\0dsp_mode\0messages\0checksum\0output\0passed\0input\0stage\0iters\0close\0ping\0open\0uri\0";
-static const uint16_t methodStrings[49] = {23,191,220,264,74,43,59,211,118,229,245,145,89,258,264,201,229,245,132,264,118,0,229,245,104,252,238,264,229,157,238,264,229,169,252,264,229,180,6,229,245,276,264,229,281,286,41,270,41};
-static const uint16_t methodStringsArrays[10] = {44,47,41,37,18,12,33,29,24,0};
-__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(hqc_slim) = {10,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
+static const Method* const methodArrays[11] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8]),&(methods[9])};
+static const char strings[323] = "total_rs_symbol_errors\0decode_buffer_bench\0decode_bench_count\0codeword_stride\0message_stride\0codeword_count\0substage_bench\0payload_inout\0total_decodes\0decode_count\0decode_bench\0mode_status\0payload_out\0payload_in\0decode_one\0codewords\0total_ops\0dsp_mode\0messages\0checksum\0output\0passed\0input\0stage\0iters\0close\0ping\0open\0uri\0";
+static const uint16_t methodStrings[55] = {23,223,252,296,93,62,78,243,137,261,277,177,108,290,296,233,261,277,43,151,137,0,261,277,164,296,137,0,261,277,123,284,270,296,261,189,270,296,261,201,284,296,261,212,6,261,277,308,296,261,313,318,41,302,41};
+static const uint16_t methodStringsArrays[11] = {50,53,47,43,24,18,12,39,35,30,0};
+__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(hqc_slim) = {11,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HQC_SLIM_H
 extern int adsp_mmap_fd_getinfo(int, uint32_t *);
 #ifdef __cplusplus
@@ -614,14 +614,16 @@ __QAIC_SKEL_EXPORT int __QAIC_SKEL(hqc_skel_handle_invoke)(remote_handle64 _h, u
       case 4:
       return _skel_method_5(__QAIC_IMPL(hqc_decode_bench), _h, _sc, _pra);
       case 5:
-      return _skel_method_4(__QAIC_IMPL(hqc_substage_bench), _h, _sc, _pra);
+      return _skel_method_5(__QAIC_IMPL(hqc_decode_bench_count), _h, _sc, _pra);
       case 6:
-      return _skel_method_3(__QAIC_IMPL(hqc_payload_in), _h, _sc, _pra);
+      return _skel_method_4(__QAIC_IMPL(hqc_substage_bench), _h, _sc, _pra);
       case 7:
-      return _skel_method_2(__QAIC_IMPL(hqc_payload_out), _h, _sc, _pra);
+      return _skel_method_3(__QAIC_IMPL(hqc_payload_in), _h, _sc, _pra);
       case 8:
-      return _skel_method_1(__QAIC_IMPL(hqc_payload_inout), _h, _sc, _pra);
+      return _skel_method_2(__QAIC_IMPL(hqc_payload_out), _h, _sc, _pra);
       case 9:
+      return _skel_method_1(__QAIC_IMPL(hqc_payload_inout), _h, _sc, _pra);
+      case 10:
       return _skel_method(__QAIC_IMPL(hqc_decode_buffer_bench), _h, _sc, _pra);
    }
    return AEE_EUNSUPPORTED;

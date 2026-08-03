@@ -277,11 +277,11 @@ static const Type types[1] = {{0x1,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,
 static const Parameter parameters[7] = {{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)0x0,0}}, 4,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),3,0},{SLIM_IFPTR32(0x4,0x8),{{(const uintptr_t)0xdeadc0de,(const uintptr_t)0}}, 0,SLIM_IFPTR32(0x4,0x8),0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,0,0},{0x4,{{(const uintptr_t)0,(const uintptr_t)1}}, 2,0x4,3,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),0,0},{SLIM_IFPTR32(0x8,0x10),{{(const uintptr_t)&(types[0]),(const uintptr_t)0x0}}, 9,SLIM_IFPTR32(0x4,0x8),3,0}};
 static const Parameter* const parameterArrays[21] = {(&(parameters[5])),(&(parameters[6])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[3])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[4])),(&(parameters[5])),(&(parameters[6])),(&(parameters[3])),(&(parameters[4])),(&(parameters[5])),(&(parameters[3])),(&(parameters[4])),(&(parameters[0])),(&(parameters[1])),(&(parameters[2]))};
 static const Method methods[10] = {{REMOTE_SCALARS_MAKEX(0,0,0x2,0x0,0x0,0x1),0x4,0x0,2,2,(&(parameterArrays[18])),0x4,0x1},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x0,0x1,0x0),0x0,0x0,1,1,(&(parameterArrays[20])),0x1,0x0},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x4,0x4,2,2,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x0,0x1,0x0,0x0),0x0,0xc,3,3,(&(parameterArrays[7])),0x1,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x4,0x10,5,5,(&(parameterArrays[6])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x1,0x0,0x0),0x8,0xc,5,5,(&(parameterArrays[5])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x1,0x0,0x0),0x8,0x4,4,3,(&(parameterArrays[15])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x1,0x2,0x0,0x0),0x8,0x4,5,3,(&(parameterArrays[12])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x2,0x0,0x0),0xc,0x4,7,4,(&(parameterArrays[11])),0x4,0x4},{REMOTE_SCALARS_MAKEX(0,0,0x2,0x2,0x0,0x0),0x1c,0x10,14,11,(&(parameterArrays[0])),0x4,0x4}};
-static const Method* const methodArrays[10] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8]),&(methods[9])};
-static const char strings[291] = "total_rs_symbol_errors\0decode_buffer_bench\0codeword_stride\0message_stride\0codeword_count\0substage_bench\0payload_inout\0total_decodes\0decode_bench\0mode_status\0payload_out\0payload_in\0decode_one\0codewords\0total_ops\0dsp_mode\0messages\0checksum\0output\0passed\0input\0stage\0iters\0close\0ping\0open\0uri\0";
-static const uint16_t methodStrings[49] = {23,191,220,264,74,43,59,211,118,229,245,145,89,258,264,201,229,245,132,264,118,0,229,245,104,252,238,264,229,157,238,264,229,169,252,264,229,180,6,229,245,276,264,229,281,286,41,270,41};
-static const uint16_t methodStringsArrays[10] = {44,47,41,37,18,12,33,29,24,0};
-__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(hqc_slim) = {10,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
+static const Method* const methodArrays[11] = {&(methods[0]),&(methods[1]),&(methods[2]),&(methods[3]),&(methods[4]),&(methods[4]),&(methods[5]),&(methods[6]),&(methods[7]),&(methods[8]),&(methods[9])};
+static const char strings[323] = "total_rs_symbol_errors\0decode_buffer_bench\0decode_bench_count\0codeword_stride\0message_stride\0codeword_count\0substage_bench\0payload_inout\0total_decodes\0decode_count\0decode_bench\0mode_status\0payload_out\0payload_in\0decode_one\0codewords\0total_ops\0dsp_mode\0messages\0checksum\0output\0passed\0input\0stage\0iters\0close\0ping\0open\0uri\0";
+static const uint16_t methodStrings[55] = {23,223,252,296,93,62,78,243,137,261,277,177,108,290,296,233,261,277,43,151,137,0,261,277,164,296,137,0,261,277,123,284,270,296,261,189,270,296,261,201,284,296,261,212,6,261,277,308,296,261,313,318,41,302,41};
+static const uint16_t methodStringsArrays[11] = {50,53,47,43,24,18,12,39,35,30,0};
+__QAIC_SLIM_EXPORT const Interface __QAIC_SLIM(hqc_slim) = {11,&(methodArrays[0]),0,0,&(methodStringsArrays [0]),methodStrings,strings};
 #endif //_HQC_SLIM_H
 
 
@@ -364,6 +364,10 @@ __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_decode_bench)(remote_handle64 _handle, in
    uint32_t _mid = 4;
    return _stub_method_2(_handle, _mid, (uint32_t*)&iters, (uint32_t*)total_decodes, (uint32_t*)total_rs_symbol_errors, (uint32_t*)checksum, (uint32_t*)passed);
 }
+__QAIC_STUB_EXPORT int __QAIC_STUB(hqc_decode_bench_count)(remote_handle64 _handle, int decode_count, int* total_decodes, int* total_rs_symbol_errors, int* checksum, int* passed) __QAIC_STUB_ATTRIBUTE {
+   uint32_t _mid = 5;
+   return _stub_method_2(_handle, _mid, (uint32_t*)&decode_count, (uint32_t*)total_decodes, (uint32_t*)total_rs_symbol_errors, (uint32_t*)checksum, (uint32_t*)passed);
+}
 static __inline int _stub_method_3(remote_handle64 _handle, uint32_t _mid, uint32_t _in0[1], uint32_t _in1[1], uint32_t _rout2[1], uint32_t _rout3[1], uint32_t _rout4[1]) {
    int _numIn[1] = {0};
    remote_arg _pra[2] = {0};
@@ -387,7 +391,7 @@ static __inline int _stub_method_3(remote_handle64 _handle, uint32_t _mid, uint3
    return _nErr;
 }
 __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_substage_bench)(remote_handle64 _handle, int stage, int iters, int* total_ops, int* checksum, int* passed) __QAIC_STUB_ATTRIBUTE {
-   uint32_t _mid = 5;
+   uint32_t _mid = 6;
    return _stub_method_3(_handle, _mid, (uint32_t*)&stage, (uint32_t*)&iters, (uint32_t*)total_ops, (uint32_t*)checksum, (uint32_t*)passed);
 }
 static __inline int _stub_method_4(remote_handle64 _handle, uint32_t _mid, char* _in0[1], uint32_t _in0Len[1], uint32_t _in1[1], uint32_t _rout2[1]) {
@@ -415,7 +419,7 @@ static __inline int _stub_method_4(remote_handle64 _handle, uint32_t _mid, char*
    return _nErr;
 }
 __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_payload_in)(remote_handle64 _handle, const unsigned char* input, int inputLen, int iters, int* checksum) __QAIC_STUB_ATTRIBUTE {
-   uint32_t _mid = 6;
+   uint32_t _mid = 7;
    return _stub_method_4(_handle, _mid, (char**)&input, (uint32_t*)&inputLen, (uint32_t*)&iters, (uint32_t*)checksum);
 }
 static __inline int _stub_method_5(remote_handle64 _handle, uint32_t _mid, char* _rout0[1], uint32_t _rout0Len[1], uint32_t _in1[1], uint32_t _rout2[1]) {
@@ -445,7 +449,7 @@ static __inline int _stub_method_5(remote_handle64 _handle, uint32_t _mid, char*
    return _nErr;
 }
 __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_payload_out)(remote_handle64 _handle, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_STUB_ATTRIBUTE {
-   uint32_t _mid = 7;
+   uint32_t _mid = 8;
    return _stub_method_5(_handle, _mid, (char**)&output, (uint32_t*)&outputLen, (uint32_t*)&iters, (uint32_t*)checksum);
 }
 static __inline int _stub_method_6(remote_handle64 _handle, uint32_t _mid, char* _in0[1], uint32_t _in0Len[1], char* _rout1[1], uint32_t _rout1Len[1], uint32_t _in2[1], uint32_t _rout3[1]) {
@@ -478,7 +482,7 @@ static __inline int _stub_method_6(remote_handle64 _handle, uint32_t _mid, char*
    return _nErr;
 }
 __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_payload_inout)(remote_handle64 _handle, const unsigned char* input, int inputLen, unsigned char* output, int outputLen, int iters, int* checksum) __QAIC_STUB_ATTRIBUTE {
-   uint32_t _mid = 8;
+   uint32_t _mid = 9;
    return _stub_method_6(_handle, _mid, (char**)&input, (uint32_t*)&inputLen, (char**)&output, (uint32_t*)&outputLen, (uint32_t*)&iters, (uint32_t*)checksum);
 }
 static __inline int _stub_method_7(remote_handle64 _handle, uint32_t _mid, char* _in0[1], uint32_t _in0Len[1], char* _rout1[1], uint32_t _rout1Len[1], uint32_t _in2[1], uint32_t _in3[1], uint32_t _in4[1], uint32_t _in5[1], uint32_t _in6[1], uint32_t _rout7[1], uint32_t _rout8[1], uint32_t _rout9[1], uint32_t _rout10[1]) {
@@ -518,7 +522,7 @@ static __inline int _stub_method_7(remote_handle64 _handle, uint32_t _mid, char*
    return _nErr;
 }
 __QAIC_STUB_EXPORT int __QAIC_STUB(hqc_decode_buffer_bench)(remote_handle64 _handle, const unsigned char* codewords, int codewordsLen, unsigned char* messages, int messagesLen, int iters, int codeword_count, int codeword_stride, int message_stride, int dsp_mode, int* total_decodes, int* checksum, int* passed, int* mode_status) __QAIC_STUB_ATTRIBUTE {
-   uint32_t _mid = 9;
+   uint32_t _mid = 10;
    return _stub_method_7(_handle, _mid, (char**)&codewords, (uint32_t*)&codewordsLen, (char**)&messages, (uint32_t*)&messagesLen, (uint32_t*)&iters, (uint32_t*)&codeword_count, (uint32_t*)&codeword_stride, (uint32_t*)&message_stride, (uint32_t*)&dsp_mode, (uint32_t*)total_decodes, (uint32_t*)checksum, (uint32_t*)passed, (uint32_t*)mode_status);
 }
 #ifdef __cplusplus

@@ -127,7 +127,7 @@ export ADB=/mnt/c/Temp/ADB/platform-tools/adb.exe
 The stable real-device entrypoint is:
 
 ```sh
-scripts/measure_android.sh --suite paper|boundary [options]
+scripts/measure_android.sh --suite paper|boundary|batch [options]
 ```
 
 Common options:
@@ -148,7 +148,9 @@ Common options:
 - `--out-root DIR`
   Overrides the local raw-result directory.
 - `--result-md FILE`
-  Overrides the markdown result log written by the paper suite.
+  Overrides the markdown result log written by the paper and batch suites.
+- `--batch-sizes "1 2 4 ..."`
+  Overrides the batch-size sweep points for the batch suite.
 
 ### Paper Suite: Latency, Energy, And CPU Offload
 
@@ -308,6 +310,93 @@ $OUT_ROOT/<timestamp>_hqc<level>/run<repeat>/
 ```
 
 The default `OUT_ROOT` is `results/fastrpc_overhead`.
+
+### Batch Suite: Decode Batch Size Sweep
+
+The batch suite measures how many codewords should be grouped into one
+FastRPC call to reduce fixed boundary overhead per decode. It uses the existing
+`buffer-bench` host mode with `rpcmem-cached` buffers and direct DSP access.
+
+Run the full batch sweep:
+
+```sh
+ADB="$ADB" \
+HEXAGON_ARCH=v73 \
+scripts/measure_android.sh --suite batch
+```
+
+Defaults:
+
+- Levels: `128 192 256`
+- Repeats: `5`
+- Batch sizes: `1 2 4 8 16 32 64 128 256`
+- Target workload: `32768` decodes per batch-size point
+- Iterations per RPC: `1`
+- RPC calls per point: `ceil(target_decodes / batch_size)`
+
+Manual command shape after deploying a level:
+
+```sh
+./hqc_host buffer-bench rpcmem-cached direct 1 <batch-size> <rpc-calls>
+```
+
+The timed region loops over `<rpc-calls>` FastRPC calls, and each call decodes
+`<batch-size>` codewords. The reported `us/decode` therefore shows boundary
+amortization as the batch size increases.
+
+### Paper-Style Batch Suite: Fixture Batch Size Sweep
+
+Use this suite when reproducing the paper-style batched latency curve. Unlike
+`buffer-bench`, it does not pass host input/output buffers through FastRPC for
+each point. The fixture corpus is compiled into the DSP binary, and each point
+is one FastRPC call that decodes `<batch-size>` fixtures inside DSP.
+
+Run the full paper-style batch sweep:
+
+```sh
+ADB="$ADB" \
+HEXAGON_ARCH=v73 \
+scripts/measure_android.sh --suite paper-batch
+```
+
+Defaults:
+
+- Levels: `128 192 256`
+- Repeats: `5`
+- Batch sizes: `1 2 4 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768`
+- RPC calls per measured point: `1`
+
+Manual command shape after deploying a level:
+
+```sh
+./hqc_host paper-batch <batch-size>
+```
+
+At `batch-size=32768`, this is directly comparable to the paper table's
+batched `bench 125` row because both run about `32000` fixture decodes inside
+one FastRPC call.
+
+For a quick smoke test:
+
+```sh
+ADB="$ADB" \
+HEXAGON_ARCH=v73 \
+scripts/measure_android.sh \
+  --suite batch \
+  --levels "128" \
+  --repeats 1 \
+  --batch-sizes "1 16" \
+  --target-decodes 512 \
+  --out-root /tmp/hqc_android_batch_check \
+  --result-md /tmp/hqc_android_batch_check.md
+```
+
+It writes:
+
+- `summary.csv`: one row per repeat, HQC level, and batch size
+- `aggregate.csv`: mean and standard deviation for `us/decode`
+- `batch_size_us_per_decode.svg`: line chart for the sweep
+- `batch_size_us_per_decode.png`: optional, only when matplotlib is available
 
 ### Manual FastRPC Build And Run
 

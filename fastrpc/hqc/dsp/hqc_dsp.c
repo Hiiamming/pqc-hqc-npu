@@ -13,6 +13,14 @@
 #define HQC_PARAM_LEVEL 128
 #endif
 
+#ifndef HQC_RM_HMX_BATCH
+#define HQC_RM_HMX_BATCH 0
+#endif
+
+#ifndef HQC_RM_HMX_DEVICE
+#define HQC_RM_HMX_DEVICE 0
+#endif
+
 #if HQC_PARAM_LEVEL == 128
 #include "hqc1_decode_fixture.h"
 #define HQC_FIXTURE_COUNT HQC1_FIXTURE_COUNT
@@ -62,10 +70,37 @@ static uint16_t substage_rs_z_ref[HQC_FIXTURE_COUNT][PARAM_N1];
 static uint16_t substage_rs_error_values_ref[HQC_FIXTURE_COUNT][PARAM_N1];
 static uint8_t substage_rs_corrected_ref[HQC_FIXTURE_COUNT][PARAM_N1];
 static uint16_t substage_rs_degree_ref[HQC_FIXTURE_COUNT];
+#if HQC_RM_HMX_BATCH
+static rm_expanded_cdw substage_rm_hmx_src[32] __attribute__((aligned(128)));
+static rm_expanded_cdw substage_rm_hmx_dst[32] __attribute__((aligned(128)));
+#endif
 
 void expand_and_sum_hvx(rm_expanded_cdw *dest, rm_codeword_t src[]);
 void hadamard_hvx(rm_expanded_cdw *src, rm_expanded_cdw *dst);
 int32_t find_peaks_hvx(rm_expanded_cdw *transform);
+#if HQC_RM_HMX_BATCH
+void hadamard_hmx32(rm_expanded_cdw src[32], rm_expanded_cdw dst[32]);
+#endif
+#if HQC_RM_HMX_BATCH && HQC_RM_HMX_DEVICE
+int reed_muller_hmx_device_acquire(void);
+void reed_muller_hmx_device_release(void);
+#endif
+
+static int hqc_hmx_begin(void)
+{
+#if HQC_RM_HMX_BATCH && HQC_RM_HMX_DEVICE
+    return reed_muller_hmx_device_acquire();
+#else
+    return 0;
+#endif
+}
+
+static void hqc_hmx_end(void)
+{
+#if HQC_RM_HMX_BATCH && HQC_RM_HMX_DEVICE
+    reed_muller_hmx_device_release();
+#endif
+}
 
 static void rm_expand(rm_expanded_cdw *dest, rm_codeword_t *src)
 {
@@ -196,6 +231,13 @@ int hqc_decode_one(remote_handle64 handle,
     int ok;
     uint32_t sum;
 
+    if (hqc_hmx_begin() != 0) {
+        *rs_symbol_errors = 0;
+        *checksum = 0;
+        *passed = 0;
+        return 0;
+    }
+
     memcpy(codeword_words, HQC_FIXTURE_CODEWORDS[fixture], VEC_N1N2_SIZE_BYTES);
     hqc_decode_direct(recovered, codeword_words);
     ok = memcmp(HQC_FIXTURE_EXPECTED_MESSAGES[fixture], recovered, sizeof(recovered)) == 0;
@@ -206,6 +248,7 @@ int hqc_decode_one(remote_handle64 handle,
     *rs_symbol_errors = HQC_FIXTURE_RS_SYMBOL_ERRORS[fixture];
     *checksum = (int)sum;
     *passed = ok;
+    hqc_hmx_end();
     return 0;
 }
 
@@ -228,6 +271,14 @@ int hqc_decode_bench(remote_handle64 handle,
         iters = 1;
     }
 
+    if (hqc_hmx_begin() != 0) {
+        *total_decodes = 0;
+        *total_rs_symbol_errors = 0;
+        *checksum = 0;
+        *passed = 0;
+        return 0;
+    }
+
     for (int i = 0; i < iters; ++i) {
         for (size_t fixture = 0; fixture < HQC_FIXTURE_COUNT; ++fixture) {
             memcpy(codeword_words, HQC_FIXTURE_CODEWORDS[fixture], VEC_N1N2_SIZE_BYTES);
@@ -243,6 +294,54 @@ int hqc_decode_bench(remote_handle64 handle,
     *total_rs_symbol_errors = rs_errors;
     *checksum = (int)sum;
     *passed = ok;
+    hqc_hmx_end();
+
+    return 0;
+}
+
+int hqc_decode_bench_count(remote_handle64 handle,
+                           int decode_count,
+                           int *total_decodes,
+                           int *total_rs_symbol_errors,
+                           int *checksum,
+                           int *passed)
+{
+    (void)handle;
+    uint8_t recovered[PARAM_K] = {0};
+    uint64_t codeword_words[VEC_N1N2_SIZE_64] __attribute__((aligned(128))) = {0};
+    int ok = 1;
+    int decodes = 0;
+    int rs_errors = 0;
+    uint32_t sum = 0;
+
+    if (decode_count <= 0) {
+        decode_count = 1;
+    }
+
+    if (hqc_hmx_begin() != 0) {
+        *total_decodes = 0;
+        *total_rs_symbol_errors = 0;
+        *checksum = 0;
+        *passed = 0;
+        return 0;
+    }
+
+    for (int i = 0; i < decode_count; ++i) {
+        size_t fixture = (size_t)i % HQC_FIXTURE_COUNT;
+
+        memcpy(codeword_words, HQC_FIXTURE_CODEWORDS[fixture], VEC_N1N2_SIZE_BYTES);
+        hqc_decode_direct(recovered, codeword_words);
+        ok &= memcmp(HQC_FIXTURE_EXPECTED_MESSAGES[fixture], recovered, sizeof(recovered)) == 0;
+        rs_errors += HQC_FIXTURE_RS_SYMBOL_ERRORS[fixture];
+        sum ^= recovered[0] ^ ((uint32_t)recovered[PARAM_K - 1] << 8) ^ (uint32_t)i;
+        ++decodes;
+    }
+
+    *total_decodes = decodes;
+    *total_rs_symbol_errors = rs_errors;
+    *checksum = (int)sum;
+    *passed = ok;
+    hqc_hmx_end();
 
     return 0;
 }
@@ -271,6 +370,13 @@ int hqc_substage_bench(remote_handle64 handle,
         return 0;
     }
 
+    if (hqc_hmx_begin() != 0) {
+        *total_ops = 0;
+        *checksum = 0;
+        *passed = 0;
+        return 0;
+    }
+
     for (size_t fixture = 0; fixture < HQC_FIXTURE_COUNT; ++fixture) {
         memcpy(substage_codeword_words[fixture], HQC_FIXTURE_CODEWORDS[fixture], VEC_N1N2_SIZE_BYTES);
         reed_muller_decode(substage_rs_words[fixture], substage_codeword_words[fixture]);
@@ -284,10 +390,17 @@ int hqc_substage_bench(remote_handle64 handle,
             memcpy(setup, substage_rm_expanded_ref[fixture][block], sizeof(setup));
             rm_hadamard(&setup, &substage_rm_transform_ref[fixture][block]);
             substage_rm_transform_ref[fixture][block][0] -= 64 * MULTIPLICITY;
-            sum ^= (uint8_t)rm_peak(&substage_rm_transform_ref[fixture][block]);
+            substage_rs_cdw_ref[fixture][block] =
+                (uint8_t)rm_peak(&substage_rm_transform_ref[fixture][block]);
+            sum ^= substage_rs_cdw_ref[fixture][block];
         }
 
-        memcpy(substage_rs_cdw_ref[fixture], substage_rs_words[fixture], PARAM_N1);
+        /*
+         * Real HMX f16 accumulation is approximate, so coefficient equality
+         * against HVX is not a valid hardware requirement. Compare the full
+         * Reed-Muller output before Reed-Solomon can mask a wrong peak.
+         */
+        ok &= memcmp(substage_rs_words[fixture], substage_rs_cdw_ref[fixture], PARAM_N1) == 0;
         hqc_rs_bench_compute_syndromes(substage_rs_syndromes_ref[fixture], substage_rs_cdw_ref[fixture]);
         substage_rs_degree_ref[fixture] = hqc_rs_bench_compute_elp(substage_rs_sigma_ref[fixture], substage_rs_syndromes_ref[fixture]);
         hqc_rs_bench_compute_roots(substage_rs_error_ref[fixture], substage_rs_sigma_ref[fixture], substage_rs_degree_ref[fixture]);
@@ -314,7 +427,22 @@ int hqc_substage_bench(remote_handle64 handle,
                 case 2: {
                     rm_expanded_cdw src;
                     rm_expanded_cdw out;
-                    for (size_t block = 0; block < PARAM_N1; ++block) {
+                    size_t block = 0;
+#if HQC_RM_HMX_BATCH
+                    for (; block + 32 <= PARAM_N1; block += 32) {
+                        memcpy(substage_rm_hmx_src,
+                               &substage_rm_expanded_ref[fixture][block],
+                               sizeof(substage_rm_hmx_src));
+                        hadamard_hmx32(substage_rm_hmx_src, substage_rm_hmx_dst);
+                        for (size_t hmx_block = 0; hmx_block < 32; ++hmx_block) {
+                            substage_rm_hmx_dst[hmx_block][0] -= 64 * MULTIPLICITY;
+                            sum ^= (uint16_t)substage_rm_hmx_dst[hmx_block][0] ^
+                                   ((uint32_t)(uint16_t)substage_rm_hmx_dst[hmx_block][127] << 16);
+                            ++ops;
+                        }
+                    }
+#endif
+                    for (; block < PARAM_N1; ++block) {
                         memcpy(src, substage_rm_expanded_ref[fixture][block], sizeof(src));
                         rm_hadamard(&src, &out);
                         out[0] -= 64 * MULTIPLICITY;
@@ -382,6 +510,7 @@ int hqc_substage_bench(remote_handle64 handle,
     *total_ops = ops;
     *checksum = (int)sum;
     *passed = ok;
+    hqc_hmx_end();
     return 0;
 }
 
@@ -515,14 +644,21 @@ int hqc_decode_buffer_bench(remote_handle64 handle,
         return 0;
     }
 
-    return hqc_decode_buffer_bench_serial(codewords,
-                                          messages,
-                                          iters,
-                                          codeword_count,
-                                          codeword_stride,
-                                          message_stride,
-                                          dsp_mode,
-                                          total_decodes,
-                                          checksum,
-                                          passed);
+    if (hqc_hmx_begin() != 0) {
+        *mode_status = HQC_BUFFER_STATUS_UNSUPPORTED;
+        return 0;
+    }
+
+    int result = hqc_decode_buffer_bench_serial(codewords,
+                                                messages,
+                                                iters,
+                                                codeword_count,
+                                                codeword_stride,
+                                                message_stride,
+                                                dsp_mode,
+                                                total_decodes,
+                                                checksum,
+                                                passed);
+    hqc_hmx_end();
+    return result;
 }

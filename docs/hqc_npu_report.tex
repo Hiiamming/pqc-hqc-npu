@@ -1,0 +1,1138 @@
+\documentclass[12pt,a4paper]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{listings}
+\newcommand{\gf}{\mathbb{F}_{2^8}}
+\usepackage{xcolor}
+\setlength{\emergencystretch}{3em}
+\newcommand{\hqc}{Hamming Quasi-Cyclic}
+
+\begin{document}
+
+\begin{titlepage}
+\begin{center}
+{\normalfont\bfseries HANOI UNIVERSITY OF SCIENCE AND TECHNOLOGY}\\[0.2cm]
+{\normalfont\bfseries SCHOOL OF INFORMATION AND COMMUNICATION TECHNOLOGY}\\[2.0cm]
+{\Large \textbf{PROJECT II REPORT}}\\[1.2cm]
+{\LARGE \textbf{Implementation and Optimization of HQC Decoding on NPU-Integrated Devices}}\\[2.0cm]
+
+\vspace{3.0cm}
+
+\begin{tabular}{@{}>{\bfseries}l@{\hspace{1.0cm}}l@{}}
+Supervisor: & Dr. Tran Vinh Duc \\[0.18cm]
+Student:    & Pham Quang Minh \\[0.18cm]
+Program:    & Cyber Security
+\end{tabular}
+\vfill
+
+{\large\bfseries Hanoi, 2026}
+
+\end{center}
+\end{titlepage}
+
+\pagenumbering{roman}
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+This project implements and evaluates an optimized decoder for \hqc{} (HQC), a code-based post-quantum key-encapsulation mechanism selected by NIST for additional standardization. HQC uses a concatenated decoding structure with an inner duplicated Reed-Muller code and an outer shortened Reed-Solomon code. These stages dominate the decoding cost and expose vector-structured operations, including reliability-vector aggregation, Hadamard-transform coefficients, Reed-Solomon syndrome vectors, finite-field products, and locator-root evaluation over public support points. We redesigned the dominant decoding kernels for Qualcomm Hexagon Vector eXtensions (HVX) in NPU-integrated devices. The optimized implementation targets the Hexagon/HVX vector backend, not tensor inference. It includes a vectorized Reed-Muller Hadamard transform, scalar-equivalent peak selection, HVX-oriented finite-field multiplication, vectorized syndrome computation, and shortened-support Chien search. We integrated the decoder with simulator benchmarks and a FastRPC real-device workflow for Snapdragon 8 Gen 2 HDK8550. In Hexagon simulator measurements, the optimized backend reaches speedups of \(23.00\times\), \(26.40\times\), and \(34.03\times\) for HQC-128, HQC-192, and HQC-256. On the real device, batched FastRPC execution improves latency by \(2.07\times\), \(1.85\times\), and \(1.96\times\), improves energy efficiency by up to \(18.13\times\), and reduces host CPU time per decode by 99.1\% to 99.7\%.
+
+\vspace{0.5cm}
+\noindent\textbf{Keywords:} post-quantum cryptography, HQC, Reed-Muller, Reed-Solomon, Qualcomm Hexagon, HVX, NPU, FastRPC, energy efficiency.
+
+\tableofcontents
+\listoftables
+\listoffigures
+\clearpage
+\pagenumbering{arabic}
+
+\chapter{Introduction}
+
+\section{Background and Motivation}
+Classical public-key cryptography relies heavily on mathematical problems such as integer factorization and discrete logarithms. These assumptions are vulnerable to large-scale quantum computers through Shor's algorithm \cite{shor1999}. Although such machines are not yet available at deployment scale, cryptographic systems need long migration windows, long-term confidentiality, and algorithmic diversity. This motivates post-quantum cryptography: public-key cryptographic schemes designed to remain secure against both classical and quantum attacks.
+
+NIST has standardized and selected several post-quantum algorithms based on different assumptions. ML-KEM and ML-DSA represent lattice-based key establishment and signatures \cite{nist-fips203,nist-fips204}; SLH-DSA represents stateless hash-based signatures \cite{nist-fips205}. NIST is also continuing additional standardization work for digital signatures, including candidates based on multivariate and isogeny-related assumptions \cite{nist-ads-2026,beullens2021,sqisign2020}. HQC is important because it provides a code-based key-encapsulation mechanism and reduces dependence on one family of assumptions \cite{nist-ir8545,hqc-spec}. Its security and structure are different from lattice-based schemes, making it valuable for a diversified post-quantum portfolio.
+
+HQC uses error-correcting codes. During decapsulation, a noisy codeword is recovered and decoded through a fixed concatenated code: an outer Reed-Solomon code and an inner duplicated Reed-Muller code. This design makes decoding a central performance issue. The Reed-Muller stage repeatedly aggregates duplicated blocks, applies Hadamard transforms, and selects maximum-magnitude coefficients. The Reed-Solomon stage computes syndromes, recovers an error-locator polynomial, searches for roots, and corrects symbols. These operations are mathematically structured, but the reference implementation is primarily scalar.
+
+Modern mobile and edge devices increasingly include heterogeneous accelerator subsystems. Qualcomm platforms expose a Hexagon processor with HVX vector support, commonly inside NPU-integrated SoCs. Although such subsystems are often discussed in the context of AI and signal processing, their lane-wise arithmetic, comparison, permutation, and reduction operations also fit structured cryptographic kernels. HQC decoding is therefore a suitable case study for evaluating whether post-quantum decoding can benefit from mobile vector acceleration.
+
+\section{Problem Statement}
+The reference HQC decoder is primarily optimized for scalar CPU execution. This project investigates whether the Reed-Muller and Reed-Solomon decoding stages can be efficiently mapped to Qualcomm Hexagon HVX vector execution while preserving scalar-reference decode outputs.
+
+A direct instruction-by-instruction port is not sufficient. Reed-Muller decoding needs data layouts that support fast Hadamard butterflies and vector reductions, while its peak-selection rule must match the scalar decoder exactly, including tie-breaking among equal-magnitude coefficients. Reed-Solomon decoding combines vectorizable finite-field products and syndrome evaluations with short dependency-heavy scalar recurrences. The challenge is to separate the work that benefits from HVX from the work that should remain scalar, then integrate the result into both simulator and real-device workflows.
+
+\section{Objectives}
+The project objectives are:
+\begin{itemize}
+  \item Analyze the HQC decoding pipeline and identify computational bottlenecks.
+  \item Design an HVX-oriented Reed-Muller decoder with repetition aggregation, vectorized Hadamard transformation, and scalar-equivalent peak selection.
+  \item Optimize Reed-Solomon finite-field operations, syndrome computation, and root search for HVX execution.
+  \item Implement the optimized decoder on Qualcomm Hexagon/HVX and integrate it with a FastRPC real-device path.
+  \item Verify that optimized outputs match the scalar reference decoder.
+  \item Evaluate Pcycles, latency, energy per decode, throughput per watt, host CPU utilization, and FastRPC boundary overhead.
+\end{itemize}
+
+\section{Scope}
+This project focuses on HQC decoding, not the complete HQC KEM or full decapsulation pipeline. The sparse polynomial multiplication stage that produces the noisy codeword is outside the optimized scope. The design is developed mainly around HQC-128, then extended to HQC-192 and HQC-256 by adapting multiplicity, Reed-Solomon length, error capacity, and support-vector count.
+
+The hardware target is a Snapdragon 8 Gen 2 HDK8550 platform with Qualcomm Hexagon/HVX support. Simulator measurements use Hexagon Pcycles. Real-device measurements use Android-host-observed latency, direct board-level energy samples, throughput per watt, process CPU accounting, and FastRPC boundary probes. Side-channel resistance is discussed as a limitation and future-work direction; the evaluated performance backend is not claimed to be side-channel hardened.
+
+\section{Contributions}
+The project contributions are grouped as follows.
+\begin{itemize}
+  \item \textbf{Design contribution:} We map HQC decoding to a Hexagon/HVX vector model by identifying vector-structured RM and RS data, selecting suitable vector primitives, and preserving scalar-equivalent decisions.
+  \item \textbf{Implementation contribution:} We implement optimized RM and RS kernels, integrate them with simulator benchmarks, and connect the cDSP path to an Android host through FastRPC.
+  \item \textbf{Experimental contribution:} We evaluate simulator Pcycles, selected substage costs, real-device latency, energy efficiency, host CPU offload, and FastRPC boundary overhead across HQC-128, HQC-192, and HQC-256.
+\end{itemize}
+
+\section{Report Organization}
+Chapter 2 introduces post-quantum cryptography, HQC, error-correcting codes, the HQC decoding pipeline, Qualcomm Hexagon/HVX, and related work. Chapter 3 analyzes the reference decoder, bottlenecks, requirements, and constraints. Chapter 4 presents the optimized design. Chapter 5 describes implementation details and correctness testing. Chapter 6 evaluates simulator and real-device results. Chapter 7 summarizes the project process and student contribution. Chapter 8 concludes and outlines future work. Appendices contain pseudocode, intrinsic mappings, and reproducibility commands.
+
+\chapter{Background and Related Work}
+
+\section{Post-Quantum Cryptography and HQC}
+Post-quantum cryptography studies public-key primitives whose security is based on problems believed to resist quantum attacks. HQC is a code-based key-encapsulation mechanism. Its construction differs from lattice schemes such as ML-KEM, providing algorithmic diversity in key establishment. In HQC, correctness depends on decoding a noisy codeword generated during decapsulation. The fixed decoding structure is useful for implementation because the major stages and parameters are known in advance.
+
+At a high level, HQC decoding first converts a noisy binary codeword into Reed-Solomon symbols by decoding duplicated Reed-Muller blocks. It then uses Reed-Solomon decoding to correct symbol errors and recover the message. The two-layer structure is the main reason the project focuses on Reed-Muller and Reed-Solomon kernels.
+
+\section{Error-Correcting Codes Used in HQC}
+\subsection{Concatenated Codes}
+HQC uses a concatenated code. Let the outer code have parameters \([n_e,k_e,d_e]\) over \(\mathbb{F}_q\), and let the inner binary code have parameters \([n_i,k_i,d_i]\). Each outer symbol is mapped to an inner codeword, producing a binary code of length \(N=n_en_i\), dimension \(K=k_ek_i\), and designed distance at least \(d_ed_i\). In HQC, the outer code is shortened Reed-Solomon and the inner code is duplicated Reed-Muller.
+
+
+
+\subsection{First-Order Reed-Muller Code}
+
+
+
+
+
+
+Let $m$ be a non-negative integer. The first-order Reed-Muller code of length $2^m$, denoted by $\mathrm{RM}(1,m)$, is defined as the set of evaluation vectors of all affine Boolean functions over $\mathbb{F}_2^m$. More precisely,
+\[
+    \mathrm{RM}(1,m)
+    =
+    \left\{
+    \bigl(f(\mathbf{x})\bigr)_{\mathbf{x}\in\mathbb{F}_2^m}
+    :
+    f(\mathbf{x})=b+\sum_{i\in[m]}a_i x_i \pmod 2
+    \right\}
+    \subseteq \mathbb{F}_2^{2^m}.
+\]
+The parameters of $\mathrm{RM}(1,m)$ are $n=2^m,\, k=m+1,\, d=2^{m-1},$
+where $n$ is the code length, $k$ is the dimension, and $d$ is the minimum Hamming distance. Decoding first-order Reed-Muller codes can be performed efficiently using the fast Hadamard transform. Given a received vector $\mathbf{y}=(y_{\mathbf{x}})_{\mathbf{x}\in\mathbb{F}_2^m}$, the decoder first
+maps its binary entries to the bipolar representation $z_{\mathbf{x}}=(-1)^{y_{\mathbf{x}}}$. For each
+$\mathbf{a}\in\mathbb{F}_2^m$, it computes the correlation
+\[
+    W(\mathbf{a})
+    =
+    \sum_{\mathbf{x}\in\mathbb{F}_2^m}
+    z_{\mathbf{x}}(-1)^{\langle \mathbf{a},\mathbf{x}\rangle}.
+\]
+The decoder selects a value of $\mathbf{a}$ that maximizes $|W(\mathbf{a})|$. The sign of $W(\mathbf{a})$ determines the affine offset, and the corresponding affine function is returned as the decoded codeword.
+
+
+ \subsection{Reed-Solomon Code}
+
+
+
+Let $\mathcal{R}=\mathbb{F}_q$ and let $\mathcal{S}=\{\alpha_1,\ldots,\alpha_n\}\subseteq\mathcal{R}$ be a set of distinct evaluation points with $n\le q$. For a message polynomial $m(X)\in\mathbb{F}_q[X]$ satisfying $\deg(m)<k$, the Reed-Solomon code of
+length $n$ and dimension $k$ is defined as
+\[
+    \mathsf{RS}(n,k)
+    =
+    \left\{
+    \bigl(m(\alpha_1),\ldots,m(\alpha_n)\bigr)
+    :
+    m(X)\in\mathbb{F}_q[X],\ \deg(m)<k
+    \right\}.
+\]
+Its minimum Hamming distance is
+\[
+    d=n-k+1.
+\]
+
+For decoding, let $\mathbf{r}=\mathbf{c}+\mathbf{e}$ be the received word, where $\mathbf{c}$ is the transmitted codeword and $\mathbf{e}$ is the error vector. The decoder first computes the syndrome values
+\[
+    S_j = r(\alpha^j), \qquad j=1,\ldots,2\delta,
+\]
+where $\alpha$ is a primitive element of $\mathbb{F}_q$ and $\delta$ is the error-correcting capability. In the cyclic or parity-check formulation used by the decoder, every valid codeword has zero syndrome at these check points. Hence, the syndromes depend only on the error polynomial $e(X)$. If all syndromes are zero, then $\mathbf{r}$ is already a valid codeword.
+
+
+Otherwise, the decoder uses the syndrome sequence to solve the key equation and recover the error-locator polynomial
+\[
+    \Lambda(X)=\prod_{i\in\mathcal{E}}(1-X\alpha^i),
+\]
+where $\mathcal{E}$ is the set of error positions. The roots of $\Lambda(X)$ identify the error locations, and the corresponding error values are then
+recovered from the error-evaluator polynomial. Finally, these errors are subtracted from $\mathbf{r}$ to obtain the original codeword.
+
+Although Reed-Solomon codes are introduced above in the evaluation-code form, the HQC decoder uses a shortened cyclic/parity-check representation. In this representation, the received word is viewed as a polynomial \(r(X)=\sum_{i=0}^{n_1-1} r_iX^i\), and syndrome values are computed by evaluating this polynomial at the prescribed check points. Thus, valid codewords have zero syndromes at these check points.
+
+
+
+
+\subsection{Hamming Quasi-Cyclic (HQC)}
+
+HQC relies on a concatenated-code construction in which the inner and outer codes are Reed-Muller and Reed-Solomon codes, respectively. More precisely,
+HQC uses an outer code with parameters $[n_e,k_e,d_e]$ over $\mathbb{F}_q$ and an inner binary code with parameters $[n_i,k_i,d_i]$ over $\mathbb{F}_2$, where $q=2^{k_i}$. Each symbol of $\mathbb{F}_q$ is mapped bijectively to a codeword of
+the inner code, which induces a binary mapping
+\[
+    \mathbb{F}_q^{n_e} \longrightarrow \mathbb{F}_2^N,
+\]
+where $N=n_e n_i$. Thus, the resulting binary concatenated code has parameters
+\[
+    [N=n_e n_i,\ K=k_e k_i,\ D\ge d_e d_i].
+\]
+
+HQC uses shortened Reed--Solomon codes together with duplicated Reed-Muller codes. The Reed-Muller parameters used in the three HQC parameter sets are
+summarized in Table~\ref{tab:duplicated-rm-codes}.
+
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.15}
+\caption{Duplicated Reed--Muller codes.}
+\label{tab:duplicated-rm-codes}
+\begin{tabular}{|c|c|c|c|}
+\hline
+Instance & Reed--Muller code & Multiplicity & Duplicated Reed--Muller code \\
+\hline
+HQC-128 & $[128,8,64]$ & $3$ & $[384,8,192]$ \\
+\hline
+HQC-192 & $[128,8,64]$ & $5$ & $[640,8,320]$ \\
+\hline
+HQC-256 & $[128,8,64]$ & $5$ & $[640,8,320]$ \\
+\hline
+\end{tabular}
+\end{table}
+
+\noindent
+The multiplicity indicates how many times each Reed-Muller codeword is duplicated.
+
+\section{Qualcomm Hexagon Architecture}
+In this project, NPU-supported execution refers to the data-parallel backend exposed by Qualcomm Hexagon HVX, not to a tensor-inference model. Modern accelerator subsystems commonly combine scalar control, vector execution, and tensor-oriented datapaths \cite{chen2020,qualcomm-hexagon-npu}; on Qualcomm platforms, Hexagon documentation describes both DSP execution and HVX vector programming interfaces \cite{qualcomm-dsp,qualcomm-hvx}. Rather than describing the optimized decoder solely in terms of processor-specific instructions, we model the accelerator as a finite-lane vector machine. This abstraction is sufficient for the Reed-Muller and Reed-Solomon optimizations considered in this work, since their dominant operations consist of regular lane-wise arithmetic, finite-field products, permutations, and reductions.
+
+We mainly focus on the HQC-128 parameter set. The same optimization principles also apply to the other HQC parameter sets, with the corresponding changes in block sizes and the number of required vector blocks. Let $L$ denote the number of lanes in a vector register, and let
+\[
+    \mathbf{x}=(x_0,\ldots,x_{L-1})\in\mathcal{R}^{L}.
+\]
+The ring $\mathcal{R}$ depends on the stage being accelerated. Signed 16-bit integers are used for Reed-Muller soft values, whereas elements of
+$\mathbb{F}_{2^8}$ are embedded in 16-bit lanes for Reed-Solomon arithmetic. We use the following abstract vector operations:
+\[
+\begin{aligned}
+\mathsf{VADD}(\mathbf{x},\mathbf{y}) &=(x_i+y_i)_{i=0}^{L-1},\\
+\mathsf{VSUB}(\mathbf{x},\mathbf{y}) &=(x_i-y_i)_{i=0}^{L-1},\\
+\mathsf{VABS}(\mathbf{x}) &=(|x_i|)_{i=0}^{L-1},\\
+\mathsf{VMAX}(\mathbf{x},\mathbf{y}) &=(\max(x_i,y_i))_{i=0}^{L-1},\\
+\mathsf{VMIN}(\mathbf{x},\mathbf{y}) &=(\min(x_i,y_i))_{i=0}^{L-1}.
+\end{aligned}
+\]
+The operation
+\[
+    \mathsf{VSPLAT}(a)=(a,\ldots,a)
+\]
+broadcasts a scalar value to all vector lanes. We represent bit-level vector operations as
+\[
+\begin{aligned}
+\mathsf{VXOR}(\mathbf{x},\mathbf{y}) &=(x_i\oplus y_i)_{i=0}^{L-1},\\
+\mathsf{VAND}(\mathbf{x},\mathbf{y}) &=(x_i\wedge y_i)_{i=0}^{L-1},\\
+\mathsf{VSHL}_{s}(\mathbf{x}) &=(x_i\ll s)_{i=0}^{L-1},\\
+\mathsf{VSHR}_{s}(\mathbf{x}) &=(x_i\gg s)_{i=0}^{L-1}.
+\end{aligned}
+\]
+
+We also use two reduction operations:
+\[
+    \mathsf{VREDUCE\_MAX}(\mathbf{x})=\max_{0\le i<L}x_i,
+    \qquad
+    \mathsf{VREDUCE\_MIN}(\mathbf{x})=\min_{0\le i<L}x_i.
+\]
+Both reductions are implemented as rotation trees. For example, maximum reduction applies updates of the form
+\[
+    \mathbf{z}
+    \leftarrow
+    \mathsf{VMAX}
+    \bigl(
+        \mathbf{z},
+        \mathsf{VROT}_{s}(\mathbf{z})
+    \bigr)
+\]
+for a sequence of rotation offsets $s$. Replacing $\mathsf{VMAX}$ with $\mathsf{VMIN}$ gives the corresponding minimum reduction. Finally, the Reed--Muller transform uses the following selection primitives:
+\[
+\begin{aligned}
+\mathsf{VCMPEQ}(\mathbf{x},\mathbf{y})
+    &=
+    \bigl(\mathbf{1}\{x_i=y_i\}\bigr)_{i=0}^{L-1},\\
+\mathsf{VSELECT}(\mathbf{m},\mathbf{x},\mathbf{y})
+    &=
+    (m_i x_i+(1-m_i)y_i)_{i=0}^{L-1}.
+\end{aligned}
+\]
+
+\section{Related Work}
+HQC implementation has been studied on several backends. The HQC specification and reference implementation define the algorithmic baseline \cite{hqc-spec}. Optimized HQC work has targeted high-performance software and finite-field operations \cite{opthqc2025}, constrained ARM Cortex-M4 platforms \cite{kim2025,aissaoui2024}, and hardware acceleration \cite{deshpande2023,antognazza2025}. Other work focuses on sparse polynomial multiplication and Frobenius additive FFT methods for HQC-related arithmetic \cite{tu2023,ras2025}.
+
+The broader post-quantum implementation literature shows that mapping algebraic kernels to the execution backend is decisive. Lattice schemes such as Kyber/ML-KEM and Dilithium/ML-DSA have been optimized for Cortex-M4 and hardware accelerators \cite{abdulrahman2022,carril2024,urquhart2024}. For code-based cryptography, Reed-Muller Hadamard transforms, Reed-Solomon syndrome computation, finite-field multiplication, and Chien search are long-standing implementation targets \cite{chien1964,berlekamp1968}. This project contributes a mobile Hexagon/HVX mapping for the HQC decoding stage, complementing CPU, microcontroller, FPGA, and RISC-V/SoC work.
+
+\chapter{Problem Analysis and System Requirements}
+\label{chap:requirements}
+
+\section{Reference Decoder Analysis}
+The baseline decoder follows the HQC concatenated-code flow. The scalar path receives a noisy codeword, partitions it into duplicated RM blocks, decodes each RM block into one RS symbol, and applies RS decoding to recover the message. The implementation organization used in this project separates portable scalar code, optimized Hexagon/HVX code, FastRPC glue, fixtures, benchmark runners, and measurement scripts.
+
+The RM workload repeats many fixed-size operations. HQC-128 has 46 RM blocks per decode; HQC-192 has 56; HQC-256 has 90. Each RM block eventually runs a 128-point Hadamard transform and a peak-selection step. The RS workload then processes the symbol vector using finite-field arithmetic over \(\gf\), syndrome computation, Berlekamp-Massey locator recovery, root search, and correction.
+
+\section{Bottleneck Identification}
+Profiling and substage simulator measurements identify four important optimized substages for HQC-128: RM Hadamard transform, RM peak selection, RS syndrome computation, and the RS error-locator-polynomial related stage. These stages have high scalar cost and expose different optimization opportunities. RM Hadamard and peak selection are dominated by regular vector operations and reductions. RS syndrome computation contains many finite-field products over independent syndrome lanes. Root search evaluates a locator polynomial over public support points and can be converted to packed support-vector evaluation.
+
+The final full-decode simulator table confirms that optimizing these stages changes the full decoder cost, not only isolated microbenchmarks. The current checked simulator methodology reports HQC-128 full decode reduction from 953,763 to 41,471 Pcycles/decode.
+
+\section{Functional Requirements}
+The optimized decoder must satisfy the following requirements:
+\begin{itemize}
+  \item Produce the same decoded output as the scalar reference decoder on the full fixture corpus.
+  \item Support HQC-128, HQC-192, and HQC-256 decode benchmarks.
+  \item Preserve the public HQC decoding interface used by benchmark and FastRPC wrappers.
+  \item Run on the Hexagon simulator and on the Snapdragon cDSP path.
+  \item Preserve scalar-equivalent RM peak tie-breaking for equal-magnitude coefficients.
+\end{itemize}
+
+\section{Non-Functional Requirements}
+The optimized implementation should reduce Pcycles in simulator, reduce real-device latency, reduce energy per decode, and offload host CPU work. It should keep memory layouts clear enough for reproducible measurement and avoid changing algorithmic outputs. The security scope must also be explicit: the performance backend is evaluated for correctness and efficiency, while deeper side-channel hardening remains future work.
+
+\section{Constraints and Assumptions}
+The design assumes HVX-style lane-wise vector operations, halfword lane representations for RM scores and RS field elements, aligned vector loads where required by the Hexagon toolchain, and precomputed finite-field tables. HQC-256 has 90 RS support points, so one HVX vector is not enough for all support lanes; the design uses two vector accumulators for its shortened-support search. Simulator Pcycles are not real-device time. Real-device latency also includes FastRPC boundary cost, runtime scheduling, clock behavior, and host synchronization.
+
+\chapter{Proposed Design and Optimization}
+\label{chap:design}
+
+\section{Overall Optimized Architecture}
+\begin{figure}[h]
+\centering
+\fbox{\begin{minipage}{0.86\textwidth}
+\centering
+Host application and benchmark runner\\[0.15cm]
+\(\Downarrow\) FastRPC or simulator entry point\\[0.15cm]
+Hexagon/HVX execution\\[0.15cm]
+\begin{tabular}{ll}
+\(\triangleright\) & RM repetition aggregation\\
+\(\triangleright\) & Vector Hadamard transform\\
+\(\triangleright\) & Scalar-equivalent peak selection\\
+\(\triangleright\) & RS syndrome computation\\
+\(\triangleright\) & Berlekamp-Massey locator recovery\\
+\(\triangleright\) & Shortened-support Chien search\\
+\(\triangleright\) & Error correction\\
+\end{tabular}\\[0.15cm]
+\(\Downarrow\)\\[0.15cm]
+Decoded message and benchmark statistics
+\end{minipage}}
+\caption{Overall optimized HQC decode architecture.}
+\label{fig:optimized-architecture}
+\end{figure}
+
+The optimized architecture keeps the HQC decode pipeline intact but changes the execution strategy of its dominant kernels. Regular data-parallel kernels are mapped to HVX. Short control recurrences with loop-carried dependencies remain scalar but use faster finite-field arithmetic. The real-device path wraps the optimized decoder in a batched FastRPC call so that boundary overhead is amortized over many decodes.
+
+\section{Reed-Muller Optimization}
+\subsection{Aggregating Duplicated Blocks}
+For each Reed-Solomon symbol, the duplicated Reed-Muller code provides several repetitions of a length-$128$ Reed-Muller codeword. In HQC-128, the multiplicity is three. The decoder first aggregates the repeated bits coordinate-wise. If $b_i^{(r)}\in\{0,1\}$ denotes the $i$-th bit in repetition $r$, then the soft value used by the Hadamard decoder is
+\[
+    x_i=\sum_{r=0}^{2} b_i^{(r)}, \qquad 0\le i<128.
+\]
+This produces an integer reliability vector that is subsequently used as the input to the Hadamard transform. For HQC-192 and HQC-256, the same aggregation
+procedure is used with multiplicity five.
+
+\subsection{Vectorized Hadamard Transform}
+After expansion, the Reed-Muller decoder applies the fast Hadamard transform
+for \(\mathrm{RM}(1,7)\). The current vector is split into two
+paired parts
+$
+    \mathbf{x} = \mathbf{x}_{L} \Vert \mathbf{x}_{R},
+$
+ then the decoder computes the lane-wise sum and difference,
+\[
+    \mathbf{y}_{L} = \mathbf{x}_{L} + \mathbf{x}_{R},
+    \qquad
+    \mathbf{y}_{R} = \mathbf{x}_{L} - \mathbf{x}_{R},
+\]
+and concatenates them to form the next transform state
+$
+    \mathbf{y} = \mathbf{y}_{L} \Vert \mathbf{y}_{R}
+$.
+We utilize the $\mathsf{VDEALH}$ intrinsic to split vector $\mathbf{x}$ before computing element-wise addition and subtraction in parallel using $\mathsf{VADDH}$ and $\mathsf{VSUBH}$, respectively. The transform consists of seven butterfly stages for the $128$-point Hadamard
+transform.
+
+\subsection{Peak Selection and Tie-Breaking Correctness}
+The final Reed-Muller decision selects the Hadamard coefficient with the largest
+magnitude, breaking ties in favor of the smallest index:
+\[
+    i^\star = \min\arg\max_i |\hat{x}_i|.
+\]
+
+The HVX implementation follows the same rule, but performs the search in
+parallel across all coefficient lanes. It first computes the magnitude vector
+\[
+    \mathbf m = (|\hat{x}_0|,\ldots,|\hat{x}_{127}|),
+\]
+and reduces it to the global maximum magnitude \(M\). All lanes satisfying
+\(|\hat{x}_i|=M\) are then marked as peak candidates. To enforce the scalar
+tie-breaking rule, the decoder keeps the original index of each candidate lane
+and replaces every non-candidate lane by a sentinel value larger than any valid
+index. Thus, the remaining problem becomes a vector minimum reduction over the
+candidate indices. The result is exactly the smallest index attaining the
+maximum magnitude.
+
+Finally, the sign of the selected coefficient \(\hat{x}_{i^\star}\) determines the decoded Reed-Muller output bit.
+
+\section{Reed-Solomon Optimization}
+\subsubsection{Galois field multiplication.} Reed-Solomon decoding involves several polynomial operations over
+\(\mathbb F_{2^8}\), where finite-field multiplication is one of the main costs. We use two multiplication strategies depending on the execution pattern:
+table-driven multiplication for scalar operations, and an HVX-oriented bit-serial method when many products are computed in parallel.
+
+\noindent\textbf{A. Table-driven multiplication.}
+\label{sec:gf-mul}
+For scalar products, we use logarithm and antilogarithm tables. The antilogarithm
+table stores powers of the primitive element \(\alpha\), while the logarithm
+table maps each nonzero field element to its exponent with respect to
+\(\alpha\). Thus, instead of multiplying two field elements directly, we compute
+\[
+    a\cdot b =
+    \begin{cases}
+        0, & a=0 \text{ or } b=0,\\
+        \alpha^{\log_\alpha(a)+\log_\alpha(b) \bmod 255}, & \text{otherwise}.
+    \end{cases}
+\]
+This reduces one field multiplication to two logarithm lookups, one modular
+addition, and one antilogarithm lookup.
+
+\noindent\textbf{B. Vector multiplication.}
+For vectorized Reed-Solomon operations, i.e., syndrome computation and Chien search, we
+avoid table lookups and instead compute many field products in parallel using
+HVX lane-wise operations. The target operation is scalar-by-vector
+multiplication
+\[
+    a\cdot \mathbf b
+    =
+    (a b_0, a b_1,\ldots,a b_{L-1}),
+    \qquad
+    a,b_i\in \mathbb F_{2^8}.
+\]
+
+We first implement the lane-wise \(\mathsf{xtime}\) operation, i.e.,
+multiplication by \(X\) in \(\mathbb F_{2^8}\). In HQC, an overflow after a left shift is reduced by XORing with
+\(\mathtt{0x1d}\). Thus, for each byte \(x\),
+\[
+    \mathsf{xtime}(x)
+    =
+    \bigl((x \ll 1) \oplus (\mathsf{carry}\cdot \mathtt{0x1d})\bigr)
+    \,\&\, \mathtt{0xff},
+\]
+where
+$\mathsf{carry}=(x\gg 7)\,\&\,1.$
+Using this \(\mathsf{xtime}\) primitive, scalar-by-vector multiplication is
+performed in a bit-serial Horner form. Let $\mathbf{a}=(a,\dots,a)$, the bits of each lane \(b_i\) are then processed from the most significant bit
+to the least significant bit. At bit position \(k\), the implementation extracts
+the \(k\)-th bit of every lane,
+\[
+    \mathbf b_k=(\mathbf b\gg k)\,\&\,1,
+\]
+turns it into a full-lane mask \(\mathbf m_k\), updates the accumulator by
+\(\mathsf{xtime}\), and conditionally XORs in \(\mathbf a\):
+\[
+    \mathbf z
+    \leftarrow
+    \mathsf{xtime}(\mathbf z)
+    \oplus
+    (\mathbf a\,\&\,\mathbf m_k).
+\]
+After the eight bit positions are processed, each lane of \(\mathbf z\)
+contains \(a b_i\).
+
+\subsection{Vectorized Syndrome Computation}
+Syndrome computation evaluates the received Reed-Solomon word at consecutive powers of
+the primitive element. Instead of computing one syndrome at a time, we vectorize
+across syndrome indices.
+
+For each received-symbol position \(j\), we pack the required powers into
+\[
+    \mathbf a_j =
+    \bigl(
+        \alpha^j,\alpha^{2j},\ldots,\alpha^{(2\delta)j},
+        0,\ldots,0
+    \bigr)
+    \in \mathbb F_{2^8}^{64}.
+\]
+The first \(2\delta\) lanes correspond to syndrome values, while the remaining
+lanes are padding.
+
+The decoder invokes the vector multiplication described above for each received symbol $c_j$ and $\mathbf{a}_j$ to get the output:
+\[
+    c_j \mathbf a_j
+    =
+    (c_j\alpha^j,\;c_j\alpha^{2j},\ldots,c_j\alpha^{(2\delta)j},0,\ldots,0)
+\]
+and accumulates it by XOR:
+\[
+    \mathbf s \leftarrow \mathbf s \oplus c_j\mathbf a_j .
+\]
+After all \(j\ge 1\) terms are processed, the constant term \(c_0\) is
+broadcast to all lanes and XORed into the accumulator:
+\[
+    \mathbf S = \mathbf s \oplus \mathsf{VSPLAT}(c_0).
+\]
+The first \(2\delta\) lanes of \(\mathbf S\) form the syndrome array.
+
+\subsection{Shortened-Support Chien Search}
+\label{sec:rs_code_3_3_3}
+Root finding identifies the positions where the error-locator polynomial
+vanishes on the Reed-Solomon support. For a candidate position \(i\), let
+\[
+    x_i = \alpha^{-i}, \qquad 0 \le i < n_1 .
+\]
+
+A position is marked as erroneous when the locator polynomial evaluates to zero at this point. The HQC specification describes this step using an additive FFT, which is well suited to scalar CPU implementations due to its asymptotically efficient polynomial evaluation structure. However, additive FFTs contain several sequential data dependencies and irregular memory-access patterns that limit their efficiency on HVX-style vector accelerators. Therefore, in our implementation, we instead use a shortened-support Chien search, whose evaluation pattern maps more naturally to lane-wise SIMD execution. In particular, we evaluate the locator polynomial only on the public support points of the shortened code.
+
+To expose vector parallelism, the powers of all support points are packed into
+vectors. For each degree \(j\), we define
+\[
+    \mathbf{p}_j
+    =
+    (x_0^j,x_1^j,\ldots,x_{n_1-1}^j,0,\ldots,0)
+    \in \mathbb{F}_{2^8}^{64},
+    \qquad
+    0\le j\le \delta,
+\]
+where the remaining lanes are padded to match the HVX vector width. The locator
+polynomial is then evaluated by accumulating the coefficient-weighted support
+vectors, which are again computed efficiently with the help of scalar vector multiplication described above, using \texttt{Q6\_V\_vxor\_VV}:
+\[
+    \mathbf{r}
+    =
+    \sigma_0\mathbf{p}_0
+    \oplus
+    \sigma_1\mathbf{p}_1
+    \oplus
+    \cdots
+    \oplus
+    \sigma_{\deg\sigma}\mathbf{p}_{\deg\sigma}.
+\]
+Equivalently, the \(i\)-th active lane of \(\mathbf r\) contains
+\(\sigma(x_i)\). Lanes that evaluate to zero give
+the located-error indicator
+\[
+    e_i^{\mathrm{loc}} = \mathbf{1}\{\sigma(x_i)=0\},
+    \qquad 0\le i<n_1.
+\]
+
+Thus, the loop over the locator coefficients remains sequential, but for each
+coefficient all shortened support points are evaluated in parallel across HVX
+lanes.
+
+\subsection{Error-Locator Polynomial Computation}
+The error-locator polynomial $\sigma(x)$ is recovered from the syndromes using the
+Berlekamp--Massey algorithm. Over $2\delta$ iterations, the algorithm
+maintains the current locator $\sigma(x)$, an auxiliary (previous-best) locator
+$b(x)$, and their degrees. At each iteration $\mu$ it (i)~computes a discrepancy as
+the inner product of the current locator with the most recent syndromes,
+\[
+  d_\mu \;=\; S_\mu \;\oplus\; \bigoplus_{i=1}^{\deg \sigma} \sigma_i\, S_{\mu-i},
+\]
+and (ii)~when $d_\mu \neq 0$, updates the locator by
+$\sigma(x) \leftarrow \sigma(x) \oplus \gamma\, x^{m} b(x)$, where
+$\gamma = d_\mu \cdot d_\rho^{-1}$ and $d_\rho$ is the discrepancy recorded at the
+last length change. Whenever the length-change condition $2\deg\sigma \le \mu$ holds,
+the algorithm promotes the saved locator to the auxiliary polynomial $b(x)$, resets
+the shift counter $m$, and updates the tracked degrees.
+
+Unlike the Reed-Muller stages and the syndrome and root-search kernels, the
+Berlekamp--Massey recurrence is inherently sequential: the discrepancy at iteration
+$\mu$ depends on the locator coefficients produced by the preceding iterations, and
+the locator and auxiliary polynomials are short---at most $\delta+1 = 16$ coefficients
+for HQC-128. Vectorizing this recurrence across HVX lanes therefore yields little
+benefit while complicating the control flow. We accordingly keep the error-locator
+stage scalar and instead accelerate its dominant cost---finite-field
+multiplication---using the table-driven logarithm/antilogarithm method of
+Section~\ref{sec:gf-mul}. Each locator update and each discrepancy
+term is a single $\mathbb{F}_{2^8}$ product reduced to two logarithm lookups, one
+modular addition, and one antilogarithm lookup; the outer recurrence runs the full
+$2\delta = 30$ iterations, while the inner discrepancy and update loops range only
+over the active coefficients up to the current locator degree. With table-driven
+arithmetic, this stage drops from $119{,}595$ to $6{,}581$ Pcycles per decode
+---about $16\%$ of the optimized HQC-128 decode---without
+any HVX vectorization. After the locator roots and error values are obtained, the decoder applies the corrections to the received Reed-Solomon word and recovers the message bytes.
+
+\section{Support for HQC-192 and HQC-256}
+\begin{table}[h]
+\centering
+\caption{Parameter changes across HQC parameter sets.}
+\label{tab:param-extension}
+\begin{tabular}{lccc}
+\toprule
+Tweak & HQC-128 & HQC-192 & HQC-256\\
+\midrule
+Reed-Muller multiplicity & 3 & 5 & 5\\
+RS code length & 46 & 56 & 90\\
+Error capacity & 15 & 16 & 29\\
+Chien HVX vectors & 1 & 1 & 2\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Although the implementation discussion above mainly focuses on the HQC-128 parameter set, the same optimization strategy extends naturally to HQC-192 and HQC-256. The three HQC variants differ primarily in the number of Reed-Muller repetitions, Reed-Solomon code dimensions, and the resulting decoding workload.
+
+For HQC-192 and HQC-256, the Reed-Muller aggregation stage generalizes directly from multiplicity 3 to multiplicity 5. Instead of summing three duplicated Reed-Muller blocks before the Hadamard transform, the decoder accumulates five repeated blocks using the same lane-wise HVX addition operations. Since the Reed-Muller block size remains fixed at 128 bits, the Hadamard stages and peak-selection procedure remain unchanged; only the number of vector accumulation steps increases.
+
+The Reed-Solomon decoding stage also scales naturally to the larger parameter sets. In particular, HQC-256 increases the shortened Reed-Solomon support size to 90, which exceeds the 64 halfword lanes of a single HVX vector. We therefore extend the shortened-support Chien search to a multi-vector accumulation scheme: the 90 support points are partitioned across two HVX vector accumulators, each holding 64 halfword lanes (with 38 padding lanes in the second). For each locator coefficient $\sigma_j$, the scalar-by-vector multiplication is performed independently on each accumulator and combined via lane-wise XOR; the final scan over the first 90 lanes returns the located-error mask. The same packed-vector accumulation strategy extends to two parallel
+accumulators for HQC-256. The same multi-vector accumulation idea is also used when packed evaluations exceed one HVX vector. 
+
+
+Finally, all finite-field lookup tables, alpha-power tables, shortened-support vectors, and generator-polynomial coefficients are precomputed at compile time (alpha tables, generator polynomials) or initialized once at first use (transposed power tables for the HVX paths). This allows the same decoding kernels to operate across HQC-128, HQC-192, and HQC-256 without modifying the underlying vectorized arithmetic routines.
+
+\section{Design Trade-Offs}
+The design uses shortened-support Chien search instead of additive FFT on HVX because packed support evaluation maps directly to lane-wise multiplication and XOR, while additive FFT has irregular dependencies. Syndrome computation is vectorized across syndrome indices because the first \(2\delta\) syndromes fit naturally into vector lanes. GF multiplication uses two strategies because scalar table lookup is efficient for short scalar recurrences, while bit-serial scalar-vector multiplication is better suited for parallel HVX kernels.
+
+Precomputed tables trade memory for speed and simpler inner loops. This is acceptable because alpha tables, generator coefficients, and support powers are fixed for each parameter set. The cost is additional static or one-time initialized data. The benefit is that the decode loop spends cycles on vector arithmetic rather than rebuilding field powers.
+
+\chapter{Implementation}
+\label{chap:implementation}
+
+\section{Development Environment}
+The implementation and measurements use the following environment and toolchain configuration.
+\begin{table}[h]
+\centering
+\caption{Development and measurement environment.}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{ll}
+\toprule
+Item & Value\\
+\midrule
+Target Hexagon architecture & \texttt{v73} for Snapdragon 8 Gen 2 workflow\\
+Android toolchain & NDK/Bionic cross-compilation for host runners\\
+Simulator & Qualcomm \texttt{hexagon-sim} with H2 minimal hypervisor entry\\
+Device & Snapdragon 8 Gen 2 HDK8550, SM8550P\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\section{Source-Code Organization}
+The repository is organized around the paths used by the decode measurement workflow:
+\begin{itemize}
+  \item \texttt{labs/scalar}: portable scalar baseline and simulator benchmarks.
+  \item \texttt{labs/fastest}: optimized Hexagon/HVX decode backend.
+  \item \texttt{fastrpc/hqc}: FastRPC IDL, generated stubs, host wrapper, and DSP wrapper.
+  \item \texttt{runners/scalar\_cpu}: ARM64 CPU benchmark runners for Android scalar measurements.
+  \item \texttt{shared/fixtures}: generated fixed decode fixtures for HQC-128, HQC-192, and HQC-256.
+  \item \texttt{scripts}: simulator, Android, energy, process-CPU, and boundary measurement entry points.
+\end{itemize}
+
+\section{Data Representation}
+RM reliability values and Hadamard coefficients are represented as signed 16-bit lanes. RS field elements belong to \(\gf\) but are embedded in 16-bit lanes to simplify HVX masking, shifts, and XOR operations. Padding lanes are set to zero when vectors contain fewer active values than the hardware lane count. Power tables and support vectors are precomputed or initialized once so that repeated decode calls do not rebuild invariant data.
+
+\section{Module Implementation}
+\subsection{RM Decode Module}
+Input: duplicated RM-encoded blocks. Output: decoded RS symbols. The scalar baseline iterates over coordinates and transform coefficients. The optimized implementation aggregates duplicated blocks into vector lanes, runs seven vector Hadamard stages, and applies scalar-equivalent vector peak selection. Correctness depends on preserving both the maximum-magnitude decision and the minimum-index tie break.
+
+\subsection{RS Decode Module}
+Input: received RS symbol vector from RM decoding. Output: corrected message bytes. The scalar baseline computes syndromes, locator polynomial, root positions, values, and corrections with scalar field arithmetic. The optimized implementation vectorizes syndrome computation and shortened-support root search, while keeping Berlekamp-Massey scalar with faster table-based products. Correctness depends on matching the scalar syndrome sequence, locator degree, located positions, and corrected output.
+
+\subsection{FastRPC Runner}
+Input: fixture buffers and benchmark parameters from the Android host. Output: per-run decode timing and correctness status. The host passes buffer descriptors through FastRPC. The DSP wrapper executes a batched decode loop. Batching is required because a single boundary crossing costs hundreds of microseconds.
+
+\section{Correctness Testing}
+Correctness testing compares scalar and optimized outputs. The checked workflow uses the full 256-fixture corpus for each HQC parameter set. The test scope includes full decode tests for HQC-128, HQC-192, and HQC-256, plus selected substage benchmarks for HQC-128. Important correctness cases include zero-syndrome inputs, nonzero syndrome paths, RM peak ties, and fixtures with different RS-symbol error counts. The optimized backend is accepted only when it matches scalar reference output on the measured corpus.
+
+\chapter{Experimental Evaluation}
+\label{chap:evaluation}
+
+\section{Experimental Setup}
+The simulator benchmark uses paired \(T=1\) and \(T=3\) runs on a 256-fixture corpus. The normalized cost is
+\[
+  \text{Pcycles/decode}
+  =\frac{\text{Pcycles}_{T=3}-\text{Pcycles}_{T=1}}{(3-1)\times 256}.
+\]
+This removes fixed simulator overhead from the per-decode estimate.
+
+Real-device experiments run on Snapdragon 8 Gen 2 HDK8550. Each reported real-device value is the mean of five runs, and each run performs 32,000 decodes. Latency is measured around the decode loop. Energy is measured from Android power-supply voltage/current samples with qprof disabled for energy claims. Process CPU utilization is measured by sampling \texttt{/proc/<pid>/task/*/stat}. FastRPC boundary overhead is measured separately using ping, decode-one, and batched modes.
+
+Speedup, throughput per watt, and energy gain are computed per run and then averaged. Therefore, these values should not be recomputed from rounded mean columns.
+
+\section{Simulator Results}
+\begin{table}[h]
+\centering
+\caption{Paired Hexagon simulator measurements for full HQC decoding.}
+\label{tab:sim-full}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrr}
+\toprule
+Parameter & Backend & \(\Delta\)Pcycles & \(\Delta\)decodes & Pcycles/decode & Speedup\\
+\midrule
+HQC-128 & Scalar & 488,326,812 & 512 & 953,763 & 1.00x\\
+HQC-128 & NPU-supported & 21,233,214 & 512 & 41,471 & 23.00x\\
+HQC-192 & Scalar & 678,800,028 & 512 & 1,325,781 & 1.00x\\
+HQC-192 & NPU-supported & 25,714,332 & 512 & 50,223 & 26.40x\\
+HQC-256 & Scalar & 1,405,108,650 & 512 & 2,744,353 & 1.00x\\
+HQC-256 & NPU-supported & 41,295,582 & 512 & 80,655 & 34.03x\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+The optimized backend reduces full-decode Pcycles for all three parameter sets. HQC-128 improves from 953,763 to 41,471 Pcycles/decode. HQC-192 improves from 1,325,781 to 50,223 Pcycles/decode. HQC-256 improves from 2,744,353 to 80,655 Pcycles/decode. The larger parameter sets expose more repeated decoding work, so their simulator speedups are higher.
+
+\section{Substage Analysis}
+\begin{table}[h]
+\centering
+\caption{Selected HQC-128 substage Pcycle reductions.}
+\label{tab:substages}
+\begin{tabular}{lrr}
+\toprule
+Substage & Scalar & NPU-supported\\
+\midrule
+Reed-Muller Hadamard & 263,175 & 17,950\\
+Reed-Muller find peak & 71,217 & 6,081\\
+Reed-Solomon syndrome & 162,312 & 3,517\\
+Reed-Solomon error-locator polynomial & 119,595 & 6,581\\
+Full decode estimate & 953,763 & 41,471\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+RM Hadamard improves because butterfly stages become vector additions, subtractions, and rearrangements. RM peak improves because maximum-magnitude search and tie-breaking become vector reductions. RS syndrome improves the most relatively because many independent finite-field products are evaluated across syndrome lanes. The error-locator-polynomial related stage improves through faster finite-field multiplication and shortened-support evaluation, even though Berlekamp-Massey itself remains scalar.
+
+\section{Real-Device Latency}
+\begin{table}[h]
+\centering
+\caption{Real-device latency, energy, and throughput-per-watt measurements.}
+\label{tab:real-device}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrr}
+\toprule
+HQC & Backend & \(\mu\)s/decode & \(\mu\)J/decode & decodes/s/W & Speedup & Energy gain\\
+\midrule
+HQC-128 & CPU scalar & 81.144 & 189.108 & 5,641.362 & 1.00x & 1.0x\\
+HQC-128 & NPU-supported & 39.173 & 10.593 & 110,083.297 & 2.07x & 18.13x\\
+HQC-192 & CPU scalar & 103.531 & 246.480 & 4,258.922 & 1.00x & 1.0x\\
+HQC-192 & NPU-supported & 56.065 & 23.645 & 53,040.740 & 1.85x & 11.77x\\
+HQC-256 & CPU scalar & 228.082 & 584.573 & 1,747.860 & 1.00x & 1.0x\\
+HQC-256 & NPU-supported & 116.333 & 36.078 & 30,497.824 & 1.96x & 16.81x\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+Real-device latency improves for every parameter set, but the speedups are smaller than simulator speedups. The simulator isolates Hexagon computation, while the real-device path includes host invocation, FastRPC boundary crossing, runtime synchronization, memory effects, and different CPU-vs-Hexagon comparison baselines.
+
+\section{Energy Efficiency}
+The NPU-supported backend reduces energy per decode more strongly than latency. HQC-128 energy falls from 189.108 to 10.593 \(\mu\)J/decode. HQC-192 falls from 246.480 to 23.645 \(\mu\)J/decode. HQC-256 falls from 584.573 to 36.078 \(\mu\)J/decode. This yields energy gains of \(18.13\times\), \(11.77\times\), and \(16.81\times\). Energy gain is larger than latency gain because the cDSP path consumes much less host CPU work and lower net active energy for the batched decode workload.
+
+\begin{table}[h]
+\centering
+\caption{Run-to-run variability for direct real-device measurements.}
+\label{tab:real-device-cv}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrr}
+\toprule
+HQC & Backend & \(\mu\)s/decode CV & \(\mu\)J/decode CV & CPU ms/decode CV\\
+\midrule
+HQC-128 & CPU scalar & 0.17\% & 3.72\% & 0.83\%\\
+HQC-128 & NPU-supported & 0.05\% & 14.84\% & 59.27\%\\
+HQC-192 & CPU scalar & 0.08\% & 4.59\% & 0.85\%\\
+HQC-192 & NPU-supported & 0.21\% & 34.40\% & 81.44\%\\
+HQC-256 & CPU scalar & 0.10\% & 3.33\% & 0.32\%\\
+HQC-256 & NPU-supported & 0.07\% & 18.66\% & 22.83\%\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+Latency is stable across runs. Energy is more variable because it is derived from board-level voltage/current samples. CPU ms/decode variability is high for NPU-supported rows because the mean host CPU time is extremely small.
+
+\section{Host CPU Utilization}
+\begin{table}[h]
+\centering
+\caption{Process-level CPU utilization and CPU-time reduction.}
+\label{tab:cpu-offload}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrr}
+\toprule
+HQC & Backend & Process CPU \% & CPU ms/decode & CPU reduction\\
+\midrule
+HQC-128 & CPU scalar & 93.606 & 0.0803125 & 0.000\%\\
+HQC-128 & NPU-supported & 1.498 & 0.0006875 & 99.145\%\\
+HQC-192 & CPU scalar & 94.538 & 0.1025625 & 0.000\%\\
+HQC-192 & NPU-supported & 0.678 & 0.0004375 & 99.575\%\\
+HQC-256 & CPU scalar & 97.243 & 0.2268750 & 0.000\%\\
+HQC-256 & NPU-supported & 0.606 & 0.0007500 & 99.669\%\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+CPU scalar decoding keeps nearly one CPU core busy. Offloading the decode loop to cDSP frees the application processor for other work: host CPU time per decode drops by more than 99\% for all parameter sets. This is practically important on mobile devices because CPU time competes with UI, networking, scheduling, and other application tasks.
+
+\section{FastRPC Boundary Overhead}
+\begin{table}[h]
+\centering
+\caption{FastRPC boundary overhead on the real device.}
+\label{tab:boundary}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lrrrr}
+\toprule
+HQC & Ping \(\mu\)s/RPC & Decode-one \(\mu\)s/decode & Batched \(\mu\)s/decode & Decode-one slowdown\\
+\midrule
+HQC-128 & 552.804 & 590.640 & 39.205 & 15.07x\\
+HQC-192 & 530.990 & 604.201 & 56.234 & 10.74x\\
+HQC-256 & 535.708 & 629.596 & 116.104 & 5.42x\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Run-to-run variability for FastRPC boundary measurements.}
+\label{tab:boundary-cv}
+\begin{tabular}{lrrr}
+\toprule
+HQC & Ping CV & Decode-one CV & Batched CV\\
+\midrule
+HQC-128 & 1.47\% & 1.93\% & 0.08\%\\
+HQC-192 & 2.71\% & 1.03\% & 0.68\%\\
+HQC-256 & 2.73\% & 2.10\% & 0.11\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The no-op FastRPC boundary alone costs about 531 to 553 \(\mu\)s per call. One-decode-per-RPC execution is therefore much slower than batching. The measured real-device gains should be interpreted as batched cDSP throughput with amortized boundary overhead.
+
+\section{Discussion}
+Simulator speedup is much larger than real-device latency speedup because the simulator table measures compute kernels without Android host overhead. Real-device execution includes FastRPC communication, driver/runtime scheduling, host synchronization, memory effects, and frequency differences between CPU and cDSP. Some decoder work also remains scalar. These costs reduce the apparent latency speedup even when the cDSP kernels are much faster.
+
+Energy gain is larger than latency gain because the CPU scalar baseline keeps an application core busy, while the NPU-supported path moves most work to the cDSP and leaves the host process mostly waiting. The result is useful for mobile systems even when latency speedup is moderate: CPU offload and energy reduction are both important system-level outcomes.
+
+\section{Threats to Validity}
+The evaluation uses one hardware platform, so results may differ on other Hexagon generations or mobile SoCs. Energy is measured from Android power-supply samples, which are noisier than latency measurements and may be affected by background activity, thermal state, and power-management behavior. Simulator Pcycles are useful for comparing Hexagon implementations, but they are not direct wall-clock time. The fixture corpus provides repeatable correctness and benchmark coverage, but it is still finite. The reported values are means; confidence intervals are not included. Finally, the performance backend has not undergone a full side-channel evaluation.
+
+\chapter{Project Process and Contribution}
+\label{chap:process}
+
+\section{Timeline and Milestones}
+\begin{table}[h]
+\centering
+\caption{Project timeline and milestones.}
+\begin{tabular}{p{3.2cm}p{9.2cm}}
+\toprule
+Period & Milestone\\
+\midrule
+Phase 1 & Study HQC specification, reference decoder, and Qualcomm Hexagon/HVX environment.\\
+Phase 2 & Build scalar baseline, fixture generation, and simulator benchmark workflow.\\
+Phase 3 & Implement and validate RM aggregation, Hadamard transform, and peak selection.\\
+Phase 4 & Implement RS finite-field arithmetic, syndrome computation, and shortened-support root search.\\
+Phase 5 & Integrate FastRPC runner and Android measurement scripts.\\
+Phase 6 & Collect simulator, latency, energy, CPU utilization, and boundary measurements.\\
+Phase 7 & Prepare final report and presentation.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Student Contribution}
+\begin{table}[h]
+\centering
+\caption{Student contribution summary.}
+\begin{tabular}{p{3.2cm}p{9.2cm}}
+\toprule
+Student & Contribution\\
+\midrule
+Pham Quang Minh & Analyzed the HQC decoding pipeline, implemented and organized the optimized decoder workflow, integrated simulator and FastRPC measurement paths, collected and checked benchmark results, and prepared this report.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Problems Encountered}
+Direct scalar-to-HVX translation was insufficient because data layout and tie-breaking behavior mattered. Additive-FFT-style Reed-Solomon root evaluation was not a good match for HVX, so shortened-support Chien search was selected. FastRPC boundary overhead also made one-decode-per-call execution inefficient, requiring batched decode execution. Finally, real-device energy measurements were noisier than latency measurements, so repeated runs and variability reporting were necessary.
+
+\section{Changes from Initial Plan}
+The project began with the broad goal of accelerating HQC on an NPU-integrated platform. During implementation, the scope was narrowed to the concatenated decoding stage rather than full KEM decapsulation. The final implementation emphasizes HVX acceleration for stages where vector execution provides clear benefit, while keeping short dependency-heavy recurrences scalar.
+
+\chapter{Conclusion and Future Work}
+
+\section{Conclusion}
+This project built and evaluated an optimized HQC decoding backend for Qualcomm Hexagon/HVX. We analyzed the scalar reference decoder, identified RM and RS bottlenecks, implemented HVX-oriented kernels, integrated them with simulator and FastRPC workflows, and validated correctness against scalar outputs on the checked fixture corpus.
+
+The simulator results show large decode-stage speedups: \(23.00\times\), \(26.40\times\), and \(34.03\times\) for HQC-128, HQC-192, and HQC-256. On Snapdragon 8 Gen 2, the batched FastRPC backend improves latency by \(2.07\times\), \(1.85\times\), and \(1.96\times\), improves energy efficiency by \(18.13\times\), \(11.77\times\), and \(16.81\times\), and reduces host CPU time per decode by 99.1\% to 99.7\%.
+
+\section{Limitations}
+The project optimizes HQC decoding, not the full HQC KEM or full decapsulation pipeline. The implementation depends on Qualcomm Hexagon/HVX and has been evaluated on one Snapdragon 8 Gen 2 device. Energy measurement relies on Android power-supply samples and therefore has higher variability than latency. The benchmark corpus is finite. The performance backend has not undergone a full side-channel evaluation.
+
+\section{Future Work}
+Future work includes integrating sparse polynomial multiplication for full decapsulation acceleration, extending evaluation to NEON, AVX2, and other Hexagon generations, adding asynchronous or worker-pool offload scheduling, improving side-channel resilience, expanding fixture and randomized testing, and comparing performance across more mobile and embedded platforms.
+
+\begin{thebibliography}{99}
+
+\bibitem{shor1999}
+Peter W. Shor.
+\newblock Polynomial-time algorithms for prime factorization and discrete logarithms on a quantum computer.
+\newblock \emph{SIAM Review}, 41(2):303--332, 1999.
+
+\bibitem{nist-fips204}
+National Institute of Standards and Technology.
+\newblock Module-lattice-based digital signature standard.
+\newblock Federal Information Processing Standards Publication 204, National Institute of Standards and Technology, 2024.
+
+\bibitem{nist-fips203}
+National Institute of Standards and Technology.
+\newblock Module-lattice-based key-encapsulation mechanism standard.
+\newblock Federal Information Processing Standards Publication 203, National Institute of Standards and Technology, 2024.
+
+\bibitem{nist-fips205}
+National Institute of Standards and Technology.
+\newblock Stateless hash-based digital signature standard.
+\newblock Federal Information Processing Standards Publication 205, National Institute of Standards and Technology, 2024.
+
+\bibitem{nist-ir8545}
+National Institute of Standards and Technology.
+\newblock Status report on the fourth round of the NIST post-quantum cryptography standardization process.
+\newblock NIST Interagency/Internal Report 8545, National Institute of Standards and Technology, 2025.
+
+\bibitem{hqc-spec}
+HQC Team.
+\newblock Hamming Quasi-Cyclic (HQC).
+\newblock \url{https://pqc-hqc.org/doc/hqc_specifications_2025_08_22.pdf}, August 2025. Specification document, version 2025-08-22.
+
+\bibitem{nist-ads-2026}
+National Institute of Standards and Technology.
+\newblock Nine candidates advance to the third round of the additional digital signatures for the PQC standardization process.
+\newblock \url{https://csrc.nist.gov/News/2026/nist-advances-9-candidates-to-the-3rd-round-of-pqc}, 2026. Accessed 2026-05-28.
+
+\bibitem{beullens2021}
+Ward Beullens.
+\newblock MAYO: Practical post-quantum signatures from oil-and-vinegar maps, 2021.
+
+\bibitem{sqisign2020}
+Luca De Feo, David Kohel, Antonin Leroux, Christophe Petit, and Benjamin Wesolowski.
+\newblock SQISign: Compact post-quantum signatures from quaternions and isogenies.
+\newblock In \emph{Advances in Cryptology - ASIACRYPT 2020}, LNCS 12491, pages 64--93. Springer, 2020.
+
+\bibitem{opthqc2025}
+Ben Dong, Hui Feng, and Qian Wang.
+\newblock OptHQC: Optimize HQC for high-performance post-quantum cryptography, 2025.
+
+\bibitem{kim2025}
+DongCheon Kim, JunHyeok Choi, SeungYong Yoon, and Seog Chung Seo.
+\newblock Optimized implementation of HQC on Cortex-M4.
+\newblock \emph{ICT Express}, 11:939--944, 2025.
+
+\bibitem{deshpande2023}
+Sanjay Deshpande, Chuanqi Xu, Mamuri Nawan, Kashif Nawaz, and Jakub Szefer.
+\newblock Fast and efficient hardware implementation of HQC.
+\newblock In \emph{Selected Areas in Cryptography - SAC 2023}, LNCS 14201, pages 297--321. Springer, 2023.
+
+\bibitem{chen2020}
+Yiran Chen, Yuan Xie, Linghao Song, Fan Chen, and Tianqi Tang.
+\newblock A survey of accelerator architectures for deep neural networks.
+\newblock \emph{Engineering}, 6(3):264--274, 2020.
+
+\bibitem{qualcomm-hexagon-npu}
+Qualcomm Technologies, Inc.
+\newblock Qualcomm Hexagon NPU.
+\newblock \url{https://www.qualcomm.com/processors/hexagon}, 2026. Accessed 2026-05-28.
+
+\bibitem{qualcomm-hvx}
+Qualcomm Technologies, Inc.
+\newblock Qualcomm Hexagon V79 HVX Programmer Reference Manual.
+\newblock 80-N2040-61, January 16, 2025.
+
+\bibitem{aissaoui2024}
+Ridwane Aissaoui, Jean-Christophe Deneuville, Christophe Guerber, and Alain Pirovano.
+\newblock A performant quantum-resistant KEM for constrained hardware: Optimized HQC.
+\newblock In \emph{Proceedings of the 21st International Conference on Security and Cryptography (SECRYPT 2024)}, pages 668--673. SCITEPRESS, 2024.
+
+\bibitem{antognazza2025}
+Francesco Antognazza, Alessandro Barenghi, and Gerardo Pelosi.
+\newblock An efficient and unified RTL accelerator design for HQC-128, HQC-192, and HQC-256.
+\newblock \emph{IEEE Transactions on Computers}, 74(7):2306--2320, 2025.
+
+\bibitem{tu2023}
+Yazheng Tu, Pengzhou He, Cetin Kaya Koc, and Jiafeng Xie.
+\newblock LEAP: Lightweight and efficient accelerator for sparse polynomial multiplication of HQC.
+\newblock \emph{IEEE Transactions on Very Large Scale Integration (VLSI) Systems}, 31(6):892--896, 2023.
+
+\bibitem{ras2025}
+Antonio Ras, Antoine Loiseau, Mikael Carmona, Simon Pontie, Guenael Renault, Benjamin Smith, and Emanuele Valea.
+\newblock Optimizing HQC using Frobenius additive FFT on a RISC-V-based system-on-chip.
+\newblock In \emph{Proceedings of the 2025 28th Euromicro Conference on Digital System Design}, pages 608--615. IEEE, 2025.
+
+\bibitem{abdulrahman2022}
+Amin Abdulrahman, Vincent Hwang, Matthias J. Kannwischer, and Amber Sprenkels.
+\newblock Faster Kyber and Dilithium on the Cortex-M4, 2022.
+\newblock Published at ACNS 2022.
+
+\bibitem{carril2024}
+Xavier Carril, Charalampos Kardaris, Jordi Ribes-Gonzalez, Oriol Farras, Carles Hernandez, Vatistas Kostalabros, Joel Ulises Gonzalez-Jimenez, and Miquel Moreto.
+\newblock Hardware acceleration for high-volume operations of CRYSTALS-Kyber and CRYSTALS-Dilithium.
+\newblock \emph{ACM Transactions on Reconfigurable Technology and Systems}, 17(3), 2024.
+
+\bibitem{urquhart2024}
+Emma Urquhart and Frank Stajano.
+\newblock Acceleration of core post-quantum cryptography primitive on open-source silicon platform through hardware/software co-design.
+\newblock In \emph{Cryptology and Network Security - CANS 2024}, LNCS 14905, pages 144--161. Springer, 2024.
+
+\bibitem{chien1964}
+Robert T. Chien.
+\newblock Cyclic decoding procedures for Bose-Chaudhuri-Hocquenghem codes.
+\newblock \emph{IEEE Transactions on Information Theory}, 10(4):357--363, 1964.
+
+\bibitem{berlekamp1968}
+Elwyn R. Berlekamp.
+\newblock \emph{Algebraic Coding Theory}.
+\newblock McGraw-Hill, 1968.
+
+\bibitem{qualcomm-dsp}
+Qualcomm Technologies, Inc.
+\newblock Hexagon DSP User Guide.
+\newblock Qualcomm Technologies, Inc., 2018. Document 80-VB419-108.
+
+\end{thebibliography}
+
+\appendix
+
+\chapter{Optimized Kernel Pseudocode}
+\label{app:algorithms}
+
+\section{HVX-Based Hadamard Transform}
+\begin{lstlisting}[caption={HVX-style Hadamard transform for RM decoding.}]
+p1 = src; p2 = dst
+for pass = 0..6:
+    lo = p1[0:63]
+    hi = p1[64:127]
+    (dlo, dhi) = VDEAL2(hi, lo)
+    even = VDEALH(dlo)
+    odd  = VDEALH(dhi)
+    p2[0:63]   = VADD(even, odd)
+    p2[64:127] = VSUB(even, odd)
+    swap(p1, p2)
+return p1
+\end{lstlisting}
+
+\section{HVX-Based Peak Detection}
+\begin{lstlisting}[caption={Scalar-equivalent RM peak selection.}]
+abs0 = VABS(transform[0:63])
+abs1 = VABS(transform[64:127])
+maxv = VMAX(abs0, abs1)
+for rotation in [64, 32, 16, 8, 4, 2]:
+    maxv = VMAX(maxv, VROT(maxv, rotation))
+M = maxv[0]
+mask0 = VCMPEQ(abs0, VSPLAT(M))
+mask1 = VCMPEQ(abs1, VSPLAT(M))
+pos0 = VSELECT(mask0, index_lo, sentinel)
+pos1 = VSELECT(mask1, index_hi, sentinel)
+peak = VMIN(pos0, pos1)
+for rotation in [64, 32, 16, 8, 4, 2]:
+    peak = VMIN(peak, VROT(peak, rotation))
+i = peak[0]
+return encode_sign_and_index(transform[i], i)
+\end{lstlisting}
+
+\section{Vectorized GF Multiplication}
+\begin{lstlisting}[caption={Vectorized xtime and scalar-vector multiplication.}]
+function XTIME_VEC(x):
+    carry = VAND(VSHR(x, 7), VSPLAT(1))
+    mask = VSUB(VZERO(), carry)
+    shifted = VSHL(x, 1)
+    red = VAND(mask, VSPLAT(0x1d))
+    return VAND(VXOR(shifted, red), VSPLAT(0xff))
+
+function SCALAR_VEC(a, b):
+    acc = VZERO()
+    aa = VSPLAT(a)
+    for t = 7 downto 0:
+        bit = VAND(VSHR(b, t), VSPLAT(1))
+        mask = VSUB(VZERO(), bit)
+        acc = XTIME_VEC(acc)
+        acc = VXOR(acc, VAND(aa, mask))
+    return acc
+\end{lstlisting}
+
+\section{Vectorized Syndrome Computation}
+\begin{lstlisting}[caption={Packed syndrome computation.}]
+acc = VZERO()
+for j = 1..n1-1:
+    powers = A[j - 1]
+    prod = SCALAR_VEC(c[j], powers)
+    acc = VXOR(acc, prod)
+acc = VXOR(acc, VSPLAT(c[0]))
+return acc[0 : 2*delta - 1]
+\end{lstlisting}
+
+\section{Shortened-Support Chien Search}
+\begin{lstlisting}[caption={Packed support-point locator evaluation.}]
+r = VZERO()
+for j = 0..degree(sigma):
+    term = SCALAR_VEC(sigma[j], support_power[j])
+    r = VXOR(r, term)
+eloc = VCMPEQ(r, VZERO())
+return active_lanes(eloc)
+\end{lstlisting}
+
+\section{Branchy Berlekamp-Massey Locator Recovery}
+\begin{lstlisting}[caption={Scalar locator recovery with table-driven GF products.}]
+sigma = [1, 0, ...]
+b = [1, 0, ...]
+deg_sigma = 0; deg_b = 0; m = 1; d_rho = 1
+for mu = 0..2*delta-1:
+    d = S[mu]
+    for i = 1..deg_sigma:
+        d ^= GFmul(sigma[i], S[mu-i])
+    if d != 0:
+        gamma = GFmul(d, GFinv(d_rho))
+        old = sigma
+        for i = m..min(m + deg_b, delta):
+            sigma[i] ^= GFmul(gamma, b[i-m])
+        if 2*deg_sigma <= mu:
+            b = old
+            deg_b = deg_sigma
+            deg_sigma = mu + 1 - deg_sigma
+            m = 1
+            d_rho = d
+        else:
+            m += 1
+    else:
+        m += 1
+return sigma, deg_sigma
+\end{lstlisting}
+
+\chapter{HVX Intrinsic Mapping}
+\label{app:intrinsics}
+\begin{table}[h]
+\centering
+\caption{Representative mapping from vector abstraction to HVX intrinsics.}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lll}
+\toprule
+Abstraction & Representative intrinsic & Meaning\\
+\midrule
+VADD & \texttt{Q6\_Vh\_vadd\_VhVh} & Halfword lane addition\\
+VSUB & \texttt{Q6\_Vh\_vsub\_VhVh} & Halfword lane subtraction\\
+VABS & \texttt{Q6\_Vh\_vabs\_Vh} & Absolute value\\
+VMAX & \texttt{Q6\_Vh\_vmax\_VhVh} & Lane-wise maximum\\
+VMIN & \texttt{Q6\_Vh\_vmin\_VhVh} & Lane-wise minimum\\
+VSPLAT & \texttt{Q6\_Vh\_vsplat\_R} & Scalar broadcast\\
+VXOR & \texttt{Q6\_V\_vxor\_VV} & Vector XOR\\
+VAND & \texttt{Q6\_V\_vand\_VV} & Vector AND\\
+VSHL & \texttt{Q6\_Vh\_vasl\_VhR} & Lane left shift\\
+VSHR & \texttt{Q6\_Vuh\_vlsr\_VuhR} & Lane right shift\\
+VROT & \texttt{Q6\_V\_vror\_VR} & Vector rotation\\
+VDEAL & \texttt{Q6\_W\_vdeal\_VVR} & Deinterleave vectors\\
+VCMPEQ & \texttt{Q6\_Q\_vcmp\_eq\_VhVh} & Equality predicate\\
+VSELECT & \texttt{Q6\_V\_vmux\_QVV} & Predicate select\\
+VZERO & \texttt{Q6\_V\_Zero} & Zero vector\\
+\bottomrule
+\end{tabular}}
+\end{table}
+
+\chapter{Repository}
+\label{app:repo}
+Repository URL: https://github.com/Hiiamming/pqc-hqc-npu.\\
+
+\end{document}

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$PROJECT_DIR/../.." && pwd)"
 SHARED_DIR="$REPO_ROOT/shared"
-REF_SRC="${HQC_REFERENCE_SRC:-$REPO_ROOT/git/hqc_gitlab/src}"
+REF_SRC="${HQC_REFERENCE_SRC:-$REPO_ROOT/references/hqc_gitlab/src}"
 PARAM_DIR="hqc-5"
 
 OUT="$PROJECT_DIR/build/gen_hqc5_decode_fixture"

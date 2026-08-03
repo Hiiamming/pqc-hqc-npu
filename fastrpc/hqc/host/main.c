@@ -82,6 +82,7 @@ static void usage(const char *prog)
             "Usage:\n"
             "  %s [iters]\n"
             "  %s bench [iters]\n"
+            "  %s paper-batch <decode-count>\n"
             "  %s ping [calls]\n"
             "  %s decode-one [calls]\n"
             "  %s substage <1..9> [iters]\n"
@@ -89,7 +90,8 @@ static void usage(const char *prog)
             "  %s payload-in <malloc|rpcmem-cached|rpcmem-uncached> <bytes> [calls]\n"
             "  %s payload-out <malloc|rpcmem-cached|rpcmem-uncached> <bytes> [calls]\n"
             "  %s payload-inout <malloc|rpcmem-cached|rpcmem-uncached> <in-bytes> <out-bytes> [calls]\n"
-            "  %s buffer-bench <malloc|rpcmem-cached|rpcmem-uncached> <direct|copy|l2fetch|vtcm> [iters] [codeword-count]\n",
+            "  %s buffer-bench <malloc|rpcmem-cached|rpcmem-uncached> <direct|copy|l2fetch|vtcm> [iters] [codeword-count] [rpc-calls]\n",
+            prog,
             prog,
             prog,
             prog,
@@ -264,6 +266,54 @@ static int run_bench(int iters)
     double ns_per_decode = total_decodes ? (double)elapsed_ns / (double)total_decodes : 0.0;
 
     printf("[fastrpc-intrinsic-decode] total_decodes=%d total_rs_symbol_errors=%d checksum=0x%08x result=%s\n",
+           total_decodes,
+           total_rs_errors,
+           (unsigned)checksum,
+           passed ? "PASS" : "FAIL");
+    printf("[fastrpc-intrinsic-decode] elapsed_ms=%.3f ns_per_decode=%.1f us_per_decode=%.3f\n",
+           elapsed_ms,
+           ns_per_decode,
+           ns_per_decode / 1000.0);
+
+    return passed ? 0 : 1;
+}
+
+static int run_paper_batch(int decode_count)
+{
+    remote_handle64 handle = 0;
+    int total_decodes = 0;
+    int total_rs_errors = 0;
+    int checksum = 0;
+    int passed = 0;
+    int ret;
+
+    printf("[fastrpc-intrinsic-decode] paper-batch HQC-%d cDSP HVX intrinsic decoder, decode_count=%d\n",
+           HQC_PARAM_LEVEL,
+           decode_count);
+
+    ret = open_hqc(&handle);
+    if (ret != 0) {
+        return 1;
+    }
+
+    uint64_t start_ns = monotonic_ns();
+    ret = hqc_decode_bench_count(handle,
+                                 decode_count,
+                                 &total_decodes,
+                                 &total_rs_errors,
+                                 &checksum,
+                                 &passed);
+    uint64_t elapsed_ns = monotonic_ns() - start_ns;
+    close_hqc(handle);
+
+    if (ret != 0) {
+        return report_rpc_error(ret);
+    }
+
+    double elapsed_ms = (double)elapsed_ns / 1000000.0;
+    double ns_per_decode = total_decodes ? (double)elapsed_ns / (double)total_decodes : 0.0;
+
+    printf("[fastrpc-intrinsic-decode] mode=paper-batch total_decodes=%d total_rs_symbol_errors=%d checksum=0x%08x result=%s\n",
            total_decodes,
            total_rs_errors,
            (unsigned)checksum,
@@ -724,7 +774,8 @@ static int run_payload_inout(const char *alloc_name, int in_bytes, int out_bytes
 static int run_buffer_bench(const char *alloc_name,
                             const char *dsp_name,
                             int iters,
-                            int codeword_count)
+                            int codeword_count,
+                            int rpc_calls)
 {
     remote_handle64 handle = 0;
     int alloc_mode = parse_alloc_mode(alloc_name);
@@ -736,7 +787,7 @@ static int run_buffer_bench(const char *alloc_name,
     int host_ok = 1;
     int ret;
 
-    if (alloc_mode < 0 || dsp_mode < 0 || iters <= 0 || codeword_count <= 0) {
+    if (alloc_mode < 0 || dsp_mode < 0 || iters <= 0 || codeword_count <= 0 || rpc_calls <= 0) {
         usage("hqc_host");
         return 2;
     }
@@ -765,12 +816,13 @@ static int run_buffer_bench(const char *alloc_name,
                VEC_N1N2_SIZE_BYTES);
     }
 
-    printf("[fastrpc-intrinsic-decode] buffer-bench HQC-%d alloc=%s dsp_mode=%s iters=%d codeword_count=%d codeword_stride=%zu message_stride=%zu\n",
+    printf("[fastrpc-intrinsic-decode] buffer-bench HQC-%d alloc=%s dsp_mode=%s iters=%d codeword_count=%d rpc_calls=%d codeword_stride=%zu message_stride=%zu\n",
            HQC_PARAM_LEVEL,
            alloc_name,
            dsp_name,
            iters,
            codeword_count,
+           rpc_calls,
            codeword_stride,
            message_stride);
 
@@ -782,20 +834,39 @@ static int run_buffer_bench(const char *alloc_name,
     }
 
     uint64_t start_ns = monotonic_ns();
-    ret = hqc_decode_buffer_bench(handle,
-                                  codewords,
-                                  (int)codewords_size,
-                                  messages,
-                                  (int)messages_size,
-                                  iters,
-                                  codeword_count,
-                                  (int)codeword_stride,
-                                  (int)message_stride,
-                                  dsp_mode,
-                                  &total_decodes,
-                                  &checksum,
-                                  &passed,
-                                  &mode_status);
+    passed = 1;
+    for (int call = 0; call < rpc_calls; ++call) {
+        int one_decodes = 0;
+        int one_checksum = 0;
+        int one_passed = 0;
+        int one_status = 0;
+
+        ret = hqc_decode_buffer_bench(handle,
+                                      codewords,
+                                      (int)codewords_size,
+                                      messages,
+                                      (int)messages_size,
+                                      iters,
+                                      codeword_count,
+                                      (int)codeword_stride,
+                                      (int)message_stride,
+                                      dsp_mode,
+                                      &one_decodes,
+                                      &one_checksum,
+                                      &one_passed,
+                                      &one_status);
+        if (ret != 0) {
+            break;
+        }
+
+        total_decodes += one_decodes;
+        checksum ^= one_checksum ^ call;
+        passed &= one_passed;
+        mode_status = one_status;
+        if (mode_status != HQC_BUFFER_STATUS_OK) {
+            break;
+        }
+    }
     uint64_t elapsed_ns = monotonic_ns() - start_ns;
     close_hqc(handle);
 
@@ -821,10 +892,11 @@ static int run_buffer_bench(const char *alloc_name,
                                   ? "SKIP"
                                   : ((passed && host_ok) ? "PASS" : "FAIL");
 
-    printf("[fastrpc-intrinsic-decode] mode=buffer-bench alloc=%s dsp_mode=%s mode_status=%s total_decodes=%d checksum=0x%08x result=%s\n",
+    printf("[fastrpc-intrinsic-decode] mode=buffer-bench alloc=%s dsp_mode=%s mode_status=%s rpc_calls=%d total_decodes=%d checksum=0x%08x result=%s\n",
            alloc_name,
            dsp_name,
            status_name,
+           rpc_calls,
            total_decodes,
            (unsigned)checksum,
            result_name);
@@ -861,6 +933,15 @@ int main(int argc, char **argv)
                 return 2;
             }
             return run_substage(stage, HQC_DEFAULT_BENCH_ITERS);
+        }
+        if (strcmp(argv[1], "paper-batch") == 0) {
+            int decode_count = 0;
+            if (!parse_positive_int(argv[2], &decode_count)) {
+                fprintf(stderr, "Invalid decode-count: %s\n", argv[2]);
+                usage(argv[0]);
+                return 2;
+            }
+            return run_paper_batch(decode_count);
         }
         mode = argv[1];
         if (!parse_positive_int(argv[2], &count)) {
@@ -922,8 +1003,9 @@ int main(int argc, char **argv)
         if (strcmp(argv[1], "buffer-bench") == 0) {
             int iters = HQC_DEFAULT_BENCH_ITERS;
             int codeword_count = 16;
+            int rpc_calls = 1;
 
-            if (argc != 4 && argc != 5 && argc != 6) {
+            if (argc != 4 && argc != 5 && argc != 6 && argc != 7) {
                 usage(argv[0]);
                 return 2;
             }
@@ -937,7 +1019,12 @@ int main(int argc, char **argv)
                 usage(argv[0]);
                 return 2;
             }
-            return run_buffer_bench(argv[2], argv[3], iters, codeword_count);
+            if (argc >= 7 && !parse_positive_int(argv[6], &rpc_calls)) {
+                fprintf(stderr, "Invalid rpc-calls: %s\n", argv[6]);
+                usage(argv[0]);
+                return 2;
+            }
+            return run_buffer_bench(argv[2], argv[3], iters, codeword_count, rpc_calls);
         }
         if (strcmp(argv[1], "substage") == 0) {
             int stage = 0;
